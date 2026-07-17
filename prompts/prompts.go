@@ -40,3 +40,11 @@ func GetReactorPrompt() string {
 func GetConsolidationPrompt() string {
 	return strings.TrimSpace(rawConsolidationPrompt)
 }
+
+//go:embed introspection.txt
+var rawIntrospectionPrompt string
+
+// GetIntrospectionPrompt returns the introspection base prompt.
+func GetIntrospectionPrompt() string {
+	return strings.TrimSpace(rawIntrospectionPrompt)
+}

@@ -4,12 +4,15 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"strings"
+	"time"
 
 	"lyra/consolidator"
 	"lyra/idle_methods/consolidation"
 	episode_memory "lyra/idle_methods/episode_memory"
+	"lyra/idle_methods/reflector"
 	"lyra/reactor"
 	"lyra/responder"
 )
@@ -104,17 +107,84 @@ func Run() {
 				}
 				fmt.Printf("debug: consolidation completed successfully. %d episode(s) added.\n", len(newEpisodes))
 			}
+		} else if input == ">>reflect" {
+			// Convert episodic memory struct to the responder type struct for reflector
+			activeEps := episodeMgr.GetActive()
+			episodes := make([]responder.EpisodeSummary, len(activeEps))
+			for i, ep := range activeEps {
+				episodes[i] = responder.EpisodeSummary{
+					ID:            ep.ID,
+					Summary:       ep.Summary,
+					Keywords:      ep.Keywords,
+					PeakMindState: ep.PeakMindState,
+					Conclusion:    ep.Conclusion,
+				}
+			}
+
+			matchedIDs, err := reflector.Reflect(mindState, episodes)
+			if err != nil {
+				fmt.Printf("debug: error: reflection failed: %v\n", err)
+			} else {
+				loaded := 0
+				for _, id := range matchedIDs {
+					if err := episodeMgr.LoadFromDisk(id); err == nil {
+						loaded++
+					}
+				}
+				fmt.Printf("debug: reflection completed. Found %d matching episodes, loaded %d into active memory.\n", len(matchedIDs), loaded)
+			}
+		} else if strings.HasPrefix(input, ">>introspect ") {
+			episodeID := strings.TrimSpace(strings.TrimPrefix(input, ">>introspect "))
+			if err := reflector.Introspect(episodeID); err != nil {
+				fmt.Printf("debug: error: introspection failed: %v\n", err)
+			} else {
+				fmt.Printf("debug: introspection completed for %s. Reflection saved.\n", episodeID)
+			}
 		} else if input == "exit" || input == "quit" {
 			fmt.Println("lyra: goodbye!")
 			break
 		} else {
 			ctx := context.Background()
+			
+			// 3-second minimum delay + "thinking..." indicator
+			startTime := time.Now()
+			done := make(chan bool)
+			go func() {
+				fmt.Print("lyra: thinking")
+				ticker := time.NewTicker(500 * time.Millisecond)
+				defer ticker.Stop()
+				for {
+					select {
+					case <-done:
+						fmt.Print("\r\033[K") // clear the thinking line
+						return
+					case <-ticker.C:
+						fmt.Print(".")
+					}
+				}
+			}()
 
 			// Save user message to long-term history
 			_ = historyMgr.Save("user", input, mindState)
 			// Update both STMs
 			reactorSTM.Update("user", input)
 			responderSTM.Update("user", input)
+
+			var currentMA float64
+			fmt.Sscanf(mindState, "%f:", &currentMA)
+
+			// Skip logic: if MA < 0.20, 1/3 chance to skip processing
+			if currentMA < 0.20 && rand.Float64() < 0.3333 {
+				time.Sleep(time.Until(startTime.Add(3 * time.Second)))
+				done <- true
+				
+				reply := "no response"
+				fmt.Printf("lyra: %s\n", reply)
+				_ = historyMgr.Save("assistant", reply, mindState)
+				responderSTM.Update("assistant", reply)
+				reactorSTM.Update("assistant", reply)
+				continue
+			}
 
 			// Invoke reactor agent to determine mindstate after user input (uses reactor's own STM)
 			if respState, err := reactorAgent.React(ctx, reactorSTM.Get()); err == nil {
@@ -137,13 +207,9 @@ func Run() {
 			// Respond using responder's clean STM (no stored flags) + active episodes
 			reply, usefulEpisodeID, err := resp.Respond(ctx, input, mindState, responderSTM.GetNoFlags(), episodes)
 			if err != nil {
+				done <- true
 				fmt.Printf("lyra: error: failed to generate response: %v\n", err)
 			} else {
-				// Save assistant response to long-term history and responder STM
-				_ = historyMgr.Save("assistant", reply, mindState)
-				responderSTM.Update("assistant", reply)
-				reactorSTM.Update("assistant", reply)
-
 				// If the model identified a useful episode, pin it to prevent eviction
 				if usefulEpisodeID != "" {
 					episodeMgr.MarkUseful(usefulEpisodeID)
@@ -153,6 +219,15 @@ func Run() {
 				if respState, err := reactorAgent.React(ctx, reactorSTM.Get()); err == nil {
 					mindState = fmt.Sprintf("%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.NegativeEmotion, respState.PositiveEmotion, respState.UserAttention)
 				}
+
+				// Ensure at least 3 seconds have passed
+				time.Sleep(time.Until(startTime.Add(3 * time.Second)))
+				done <- true
+				
+				// Save assistant response to long-term history and responder STM
+				_ = historyMgr.Save("assistant", reply, mindState)
+				responderSTM.Update("assistant", reply)
+				reactorSTM.Update("assistant", reply)
 
 				fmt.Printf("lyra: %s\n", reply)
 			}

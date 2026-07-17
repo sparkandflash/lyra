@@ -26,6 +26,8 @@ While chatting with Lyra, you can use these special commands:
 *   `>>debug`: Bypasses the LLM and prints system status (e.g., current mindstate and active episodes).
 *   `>>mindstate <ma>:<ne>:<pe>:<ua>`: Manually override the current mindstate.
 *   `>>consolidate`: Triggers the Summariser agent to chunk unsaved history into episodic memories.
+*   `>>reflect`: Dynamically loads past episodes with high attention scores and shared keywords into active memory.
+*   `>>introspect <episode_id>`: Offline analysis of a specific episode to generate alternative response strategies.
 *   `exit` or `quit`: Terminates the interactive session cleanly.
 
 ---
@@ -71,6 +73,15 @@ Lyra features a **Reactor Agent** packaged in `reactor/` that monitors conversat
 *   **Function:** Evaluates the conversation to generate a `mindstate` score:
     `[Model Attention] : [Negative Emotion] : [Positive Emotion] : [User Attention]`
 *   **Impact:** Updates the active mindstate in real-time, allowing Lyra to adjust tone, detail length, and emotional matching dynamically in her response.
+*   **Low-Attention Skipping:** If the Model Attention drops below `0.20`, Lyra has a 33% chance to skip generating a response, simulating natural conversational disengagement.
+
+---
+
+## Reflector Module (Self-Analysis & Context)
+
+The **Reflector Module** (located in `idle_methods/reflector/`) handles dynamic context retrieval and introspective self-analysis:
+*   **Reflect (`>>reflect`):** Scans the `index.csv` for past episodes where the Attention Score (Model Attention + User Attention) was *higher* than the current conversation's attention. If it shares keywords with currently active episodes, it is pushed into the `EpisodeMemoryManager` to provide deep contextual anchoring.
+*   **Introspect (`>>introspect <id>`):** Invokes the Summariser Agent using a specialized `introspection.txt` prompt. It analyzes a past conversation episode to evaluate how Lyra could have responded differently, saving the resulting alternative strategies to `Context/episodes/reflections/` for long-term behavioral adjustment.
 
 ---
 
@@ -102,3 +113,11 @@ Packages a GGUF model directly inside the executable using Go's `//go:embed` dir
 *   [summariser/](file:///Users/pratheeksha/lyra/summariser): The background agent handling memory consolidation.
 *   [idle_methods/](file:///Users/pratheeksha/lyra/idle_methods): Features invoked explicitly or on idle (consolidation, episodic memory).
 *   [consolidator/](file:///Users/pratheeksha/lyra/consolidator): Core history and STM state manager.
+
+---
+
+## Roadmap
+
+The following modules are planned to complete the Lyra architecture:
+
+*   **Escalator Module:** A dynamic event-trigger system that monitors the mindstate over time. It will introduce "decay" mechanics and trigger spontaneous conversational shifts, proactive questions, or distinct behavioral changes when emotional thresholds are crossed (or when the conversation stagnates).

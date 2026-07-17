@@ -25,16 +25,20 @@ func NewSummariserAgent() *SummariserAgent {
 	}
 }
 
-// Summarise calls the LLM (Gemini or OpenAI/Cerebras) to request structured summary data.
+// Summarise calls the LLM using the default consolidation prompt.
 func (s *SummariserAgent) Summarise(ctx context.Context, conversationText string) (string, error) {
-	// Use mock behavior if using mock responder or if no keys are configured.
-	if s.config.Type == "mock" || s.config.Type == "" || (s.config.Type == "gemini" && s.config.APIKey == "") || (s.config.Type == "openai" && s.config.APIKey == "" && !strings.Contains(s.config.BaseURL, "localhost") && !strings.Contains(s.config.BaseURL, "127.0.0.1")) {
-		return s.summariseMock(conversationText)
-	}
-
 	systemInstruction := s.config.SystemInstruction
 	if systemInstruction == "" {
 		systemInstruction = prompts.GetConsolidationPrompt()
+	}
+	return s.SummariseWithPrompt(ctx, conversationText, systemInstruction)
+}
+
+// SummariseWithPrompt calls the LLM with a specific system instruction.
+func (s *SummariserAgent) SummariseWithPrompt(ctx context.Context, conversationText, systemInstruction string) (string, error) {
+	// Use mock behavior if using mock responder or if no keys are configured.
+	if s.config.Type == "mock" || s.config.Type == "" || (s.config.Type == "gemini" && s.config.APIKey == "") || (s.config.Type == "openai" && s.config.APIKey == "" && !strings.Contains(s.config.BaseURL, "localhost") && !strings.Contains(s.config.BaseURL, "127.0.0.1")) {
+		return s.summariseMock(conversationText)
 	}
 
 	rawResponse, err := s.callLLM(ctx, conversationText, systemInstruction)
