@@ -246,6 +246,11 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 		case evt := <-sched.EventChan:
 			switch evt {
 			case escalator.EventConsolidate:
+				sysMsg := "[System: Memory consolidation triggered]"
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				responderSTM.Update("system", sysMsg)
+				reactorSTM.Update("system", sysMsg)
+
 				newEpisodes, err := consolidation.Consolidate(historyMgr)
 				if err == nil {
 					for _, ep := range newEpisodes {
@@ -278,6 +283,11 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 				reactorSTM.Update("system", sysMsg)
 				hasUnconsolidated = true
 			case escalator.EventReflect:
+				sysMsg := "[System: Reflecting on past memories]"
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				responderSTM.Update("system", sysMsg)
+				reactorSTM.Update("system", sysMsg)
+
 				activeEps := episodeMgr.GetActive()
 				episodes := make([]responder.EpisodeSummary, len(activeEps))
 				for i, ep := range activeEps {
@@ -291,6 +301,11 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 					}
 				}
 			case escalator.EventIntrospect:
+				sysMsg := "[System: Deep introspection initiated]"
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				responderSTM.Update("system", sysMsg)
+				reactorSTM.Update("system", sysMsg)
+
 				activeEps := episodeMgr.GetActive()
 				if len(activeEps) > 0 {
 					_ = reflector.Introspect(activeEps[0].ID)
@@ -302,6 +317,12 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 				for i, ep := range activeEps {
 					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Summary: ep.Summary, Keywords: ep.Keywords, PeakMindState: ep.PeakMindState, Conclusion: ep.Conclusion}
 				}
+
+				// Inject the system cue into all active memory contexts
+				sysMsg := "[System: Proactive message triggered]"
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				reactorSTM.Update("system", sysMsg)
+				responderSTM.Update("system", sysMsg)
 
 				reply, usefulEpisodeID, err := resp.RespondProactive(ctx, mindState, responderSTM.GetNoFlags(), episodes)
 				if err == nil {

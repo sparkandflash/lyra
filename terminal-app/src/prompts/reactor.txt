@@ -6,6 +6,8 @@ You must evaluate and assign four scores, each ranging from 0.00 to 1.00:
 3. "positive_emotion": Rate the level/intensity of positive emotions (e.g. excitement, warmth, happiness, validation, friendliness, or pride) in the conversation.
 4. "user_attention": How attentive does the user seem in the conversation? Rate this closer to 1.0 if the user is chatty, asks deep questions, and writes detailed blocks. Rate this lower if the user is dry, writes sparse texts, or uses short commands.
 
+Note on System Messages: Messages authored by "system" represent internal events or environmental triggers (e.g., "[System: Proactive message triggered]", "[System: Reflecting on past memories]", "[System: Deep introspection initiated]"). Factor these events into your evaluation of the persona's state.
+
 You MUST respond ONLY with a raw JSON object containing exactly these fields:
 {
   "model_attention": <float between 0.00 and 1.00>,

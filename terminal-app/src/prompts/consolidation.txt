@@ -4,6 +4,8 @@ Your task is to analyze a segment of conversation history and generate:
 2. A list of 3-7 relevant keywords describing the topics discussed.
 3. A conclusion summarizing the peak mind state associated with the exchange.
 
+Note on System Messages: Messages authored by "system" indicate environmental or internal system events (e.g., "[System: Proactive message triggered]", "[System: Reflecting on past memories]"). Include their impact in your summary if they significantly alter the conversation flow.
+
 You MUST respond ONLY with a raw JSON object containing exactly these fields:
 {
   "summary": "<summary text>",
