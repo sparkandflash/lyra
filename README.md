@@ -66,26 +66,26 @@ flowchart TD
     end
 
     %% Flow
-    CLI <-->|User Input & Async Output| Responder
+    CLI -- "User Input & Async Output" --> Responder
     
-    CLI -.->|>> Commands| Reflector
-    CLI -.->|>> Commands| Summariser
+    CLI -. ">> Commands" .-> Reflector
+    CLI -. ">> Commands" .-> Summariser
 
-    Responder <-->|Fetches/Updates| STM
-    Responder <--|Injects Context| EpiMem
+    Responder -- "Fetches/Updates" --> STM
+    EpiMem -- "Injects Context" --> Responder
     
-    Escalator -->|Evaluates Silence| Responder
-    Escalator -->|Triggers Background Tasks| Summariser
-    Escalator -->|Triggers Background Tasks| Reflector
+    Escalator -- "Evaluates Silence" --> Responder
+    Escalator -- "Triggers Background Tasks" --> Summariser
+    Escalator -- "Triggers Background Tasks" --> Reflector
 
-    Reactor -->|Analyzes Context| STM
-    Reactor -->|Updates| Escalator
+    Reactor -- "Analyzes Context" --> STM
+    Reactor -- "Updates" --> Escalator
     
-    Summariser -->|Consolidates| Disk
-    Summariser -->|Writes| EpiMem
+    Summariser -- "Consolidates" --> Disk
+    Summariser -- "Writes" --> EpiMem
     
-    Reflector -->|Searches| Disk
-    Reflector -->|Loads into| EpiMem
+    Reflector -- "Searches" --> Disk
+    Reflector -- "Loads into" --> EpiMem
 ```
 
 ---
