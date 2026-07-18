@@ -119,6 +119,48 @@ func (e *RuleEngine) EvaluateState(mindState string, hasUnconsolidatedMessages b
 	// Time since last user activity
 	idleDuration := now.Sub(e.LastUserMessage)
 
+	// ── SLEEP STATE MACHINE ──────────────────────────────────────────
+	if idleDuration >= 3*time.Hour {
+		if e.CurrentSleepMode != 2 {
+			e.CurrentSleepMode = 2
+			return EventEnterTrueSleep
+		}
+	} else if idleDuration >= 5*time.Minute {
+		if e.CurrentSleepMode != 1 {
+			e.CurrentSleepMode = 1
+			return EventEnterTempSleep
+		}
+	} else {
+		e.CurrentSleepMode = 0 // Awake
+	}
+
+	// State 2: True Sleep (Hibernation) - Zero background tasks
+	if e.CurrentSleepMode == 2 {
+		return EventNothing
+	}
+
+	// State 1: Temp Sleep - Throttled tasks
+	if e.CurrentSleepMode == 1 {
+		// Allow one final consolidation to clean up memory
+		if hasUnconsolidatedMessages {
+			return EventConsolidate
+		}
+
+		// Throttled Introspection/Reflection
+		tempSleepCycleMins := 60
+		if val := os.Getenv("LYRA_TEMP_SLEEP_CYCLE_MINS"); val != "" {
+			if m, err := strconv.Atoi(val); err == nil && m > 0 {
+				tempSleepCycleMins = m
+			}
+		}
+		if now.Sub(e.LastIntrospection) >= time.Duration(tempSleepCycleMins)*time.Minute {
+			return EventIntrospect
+		}
+		
+		return EventNothing
+	}
+	// ─────────────────────────────────────────────────────────────────
+
 	// 2. Proactive Messaging
 	// Rule: HR is high, MA is high, user inactive for 30s, and we haven't proactived recently (cooldown 1 min)
 	if e.Heartrate > 90.0 && ma > 0.7 && idleDuration >= 30*time.Second {

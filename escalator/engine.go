@@ -13,6 +13,8 @@ const (
 	EventReflect          EventType = "REFLECT"
 	EventProactiveMessage EventType = "PROACTIVE_MESSAGE"
 	EventIntrospect       EventType = "INTROSPECT"
+	EventEnterTempSleep   EventType = "ENTER_TEMP_SLEEP"
+	EventEnterTrueSleep   EventType = "ENTER_TRUE_SLEEP"
 )
 
 // RuleEngine maintains internal state (like Heartrate) and deterministically
@@ -22,6 +24,7 @@ type RuleEngine struct {
 	Heartrate              float64
 	MentalEnergy           float64 // 0–100. Drains per response, regens at resting HR.
 	MovingAverageUserDelay time.Duration
+	CurrentSleepMode       int     // 0 = Awake, 1 = TempSleep, 2 = TrueSleep
 
 	// Timestamps
 	LastUserMessage      time.Time
@@ -39,6 +42,7 @@ func NewRuleEngine() *RuleEngine {
 		Heartrate:              70.0,
 		MentalEnergy:           100.0,
 		MovingAverageUserDelay: 10 * time.Second, // Default starting assumption
+		CurrentSleepMode:       0,
 		LastUserMessage:        now,
 		LastAssistantMessage:   now,
 		LastConsolidation:      now,

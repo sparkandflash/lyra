@@ -170,6 +170,24 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 					}
 					hasUnconsolidated = false
 				}
+			case escalator.EventEnterTempSleep:
+				sysMsg := "it has been more than 5 mins, starting idle time."
+				if debugMode {
+					fmt.Fprintf(rl.Stdout(), "[DEBUG] Entering Temp Sleep. Injecting system message.\n")
+				}
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				responderSTM.Update("system", sysMsg)
+				reactorSTM.Update("system", sysMsg)
+				hasUnconsolidated = true
+			case escalator.EventEnterTrueSleep:
+				sysMsg := "it has been more than 3 hours, starting hiberation."
+				if debugMode {
+					fmt.Fprintf(rl.Stdout(), "[DEBUG] Entering True Sleep (Hibernation). Injecting system message.\n")
+				}
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				responderSTM.Update("system", sysMsg)
+				reactorSTM.Update("system", sysMsg)
+				hasUnconsolidated = true
 			case escalator.EventReflect:
 				activeEps := episodeMgr.GetActive()
 				episodes := make([]responder.EpisodeSummary, len(activeEps))
