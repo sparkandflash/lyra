@@ -26,14 +26,14 @@ func NewLocalEmbedder() *Embedder {
 
 // Embed generates a vector embedding for the given text.
 func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {
-	url := fmt.Sprintf("%s/api/embeddings", e.BaseURL)
+	url := fmt.Sprintf("%s/api/embed", e.BaseURL)
 	
 	reqBody := struct {
-		Model  string `json:"model"`
-		Prompt string `json:"prompt"`
+		Model string `json:"model"`
+		Input string `json:"input"`
 	}{
-		Model:  e.Model,
-		Prompt: text,
+		Model: e.Model,
+		Input: text,
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -59,18 +59,18 @@ func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	}
 
 	var result struct {
-		Embedding []float32 `json:"embedding"`
+		Embeddings [][]float32 `json:"embeddings"`
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
 		return nil, err
 	}
 
-	if len(result.Embedding) == 0 {
+	if len(result.Embeddings) == 0 || len(result.Embeddings[0]) == 0 {
 		return nil, fmt.Errorf("empty embedding returned")
 	}
 
-	return result.Embedding, nil
+	return result.Embeddings[0], nil
 }
 
 // CosineSimilarity calculates the semantic similarity between two embedding vectors.

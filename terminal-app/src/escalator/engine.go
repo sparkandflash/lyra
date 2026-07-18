@@ -29,6 +29,8 @@ type RuleEngine interface {
 	GetHeartrate() float64
 	GetMentalEnergy() float64
 	SetMentalEnergy(energy float64)
+	GetCurrentSleepMode() int
+	SetSleepMode(mode int)
 }
 
 // DefaultRuleEngine maintains internal state (like Heartrate) and deterministically
@@ -93,6 +95,14 @@ func (e *DefaultRuleEngine) GetMentalEnergy() float64 {
 
 func (e *DefaultRuleEngine) SetMentalEnergy(energy float64) {
 	e.MentalEnergy = energy
+}
+
+func (e *DefaultRuleEngine) GetCurrentSleepMode() int {
+	return e.CurrentSleepMode
+}
+
+func (e *DefaultRuleEngine) SetSleepMode(mode int) {
+	e.CurrentSleepMode = mode
 }
 
 // ConsumeEnergy deducts mental energy and clamps to 0.

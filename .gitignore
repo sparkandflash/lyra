@@ -9,3 +9,4 @@ terminal-app/build/
 
 # Local Embedding Sidecar and ML Models
 terminal-app/.bin/
+old-contexts

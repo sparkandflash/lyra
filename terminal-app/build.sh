@@ -20,8 +20,9 @@ if [ ! -f "$BIN_DIR/ollama" ]; then
         echo "system error: ollama is not installed on your system. Please install it first from https://ollama.com"
         exit 1
     fi
-    echo "Copying system ollama into sidecar folder..."
-    cp "$(command -v ollama)" "$BIN_DIR/ollama"
+    echo "Symlinking system ollama into sidecar folder..."
+    REAL_OLLAMA=$(readlink "$(command -v ollama)" || command -v ollama)
+    ln -s "$REAL_OLLAMA" "$BIN_DIR/ollama"
     chmod +x "$BIN_DIR/ollama"
     
     echo "Pulling embedding model (this may take a moment)..."

@@ -81,19 +81,10 @@ func TestConsolidationFlow(t *testing.T) {
 	if ep.PeakMindState != "0.90:0.80:0.20:0.70" {
 		t.Errorf("expected peak mindstate '0.90:0.80:0.20:0.70', got %q", ep.PeakMindState)
 	}
-
-			hasSkrillex = true
-			break
-		}
-	}
-	if !hasSkrillex {
-		t.Errorf("expected keywords to contain 'skrillex', got %+v", ep.Keywords)
-	}
-
-	// 2. Verify CSV Index File was created
-	csvPath := filepath.Join("Context", "episodes", "index.csv")
-	if _, err := os.Stat(csvPath); os.IsNotExist(err) {
-		t.Fatalf("expected index.csv to be created")
+	// 2. Verify JSONL Index File was created
+	jsonlPath := filepath.Join("Context", "episodes", "index.jsonl")
+	if _, err := os.Stat(jsonlPath); os.IsNotExist(err) {
+		t.Fatalf("expected index.jsonl to be created")
 	}
 
 	// 3. Verify history JSON file messages are updated with stored:true

@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSRPEngine Terminal</title>
+    <style>
+        body {
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            margin: 0;
+            padding: 20px;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        .hidden { display: none; }
+        .system { color: #888; }
+        .lyra { color: #5dade2; }
+        .user { color: #fff; }
+        
+        input {
+            background: #000;
+            color: #fff;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 14px;
+            border: none;
+            outline: none;
+            width: 80%;
+        }
+        
+        #metrics {
+            position: fixed;
+            top: 10px;
+            right: 20px;
+            color: #aaa;
+            font-size: 12px;
+            background: #000;
+            padding: 5px;
+        }
+
+        .line {
+            margin-bottom: 4px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOGIN VIEW -->
+    <div id="login-view">
+        <div id="login-log"></div>
+        <div class="line" id="login-prompt-line">
+            <span id="login-prompt">user: </span>
+            <input type="text" id="login-input" autocomplete="off" autofocus>
+        </div>
+    </div>
+
+    <!-- CHAT VIEW -->
+    <div id="chat-view" class="hidden">
+        <div id="metrics"></div>
+        <div id="chat-log"></div>
+        <div class="line">
+            <span class="user">&gt; </span>
+            <input type="text" id="chat-input" autocomplete="off">
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = "http://localhost:8080";
+        let token = "";
+        let lastId = "";
+        
+        // --- LOGIN LOGIC ---
+        let loginStage = 'user';
+        let username = '';
+        let password = '';
+        
+        const loginInput = document.getElementById('login-input');
+        const loginLog = document.getElementById('login-log');
+        const loginPrompt = document.getElementById('login-prompt');
+        const loginView = document.getElementById('login-view');
+        
+        const chatView = document.getElementById('chat-view');
+        const chatInput = document.getElementById('chat-input');
+        const chatLog = document.getElementById('chat-log');
+        const metrics = document.getElementById('metrics');
+
+        const seenMessageContent = new Set();
+
+        function appendLoginLine(text, className = "") {
+            const div = document.createElement('div');
+            div.className = `line ${className}`;
+            div.textContent = text;
+            loginLog.appendChild(div);
+        }
+
+        loginInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const val = loginInput.value.trim();
+                
+                if (loginStage === 'user') {
+                    username = val;
+                    appendLoginLine(`user: ${username}`);
+                    loginStage = 'password';
+                    loginPrompt.textContent = 'password: ';
+                    loginInput.type = 'password';
+                    loginInput.value = '';
+                } else if (loginStage === 'password') {
+                    password = val;
+                    appendLoginLine(`password: *******`);
+                    loginInput.value = '';
+                    loginInput.disabled = true;
+                    
+                    try {
+                        const res = await fetch(`${API_BASE}/login`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ username, password })
+                        });
+                        
+                        if (!res.ok) {
+                            appendLoginLine('system: auth failed.', 'system');
+                            // Reset
+                            loginStage = 'user';
+                            loginPrompt.textContent = 'user: ';
+                            loginInput.type = 'text';
+                            loginInput.disabled = false;
+                            loginInput.focus();
+                        } else {
+                            const data = await res.json();
+                            token = data.token;
+                            appendLoginLine('system: loading lyra -->', 'system');
+                            
+                            setTimeout(() => {
+                                loginView.classList.add('hidden');
+                                chatView.classList.remove('hidden');
+                                chatInput.focus();
+                                startPolling();
+                            }, 500);
+                        }
+                    } catch (err) {
+                        appendLoginLine(`system: error connecting to server.`, 'system');
+                        loginInput.disabled = false;
+                        loginInput.focus();
+                    }
+                }
+            }
+        });
+
+        // --- CHAT LOGIC ---
+        
+        function formatMessage(author, content) {
+            let className = "user";
+            let prefix = "> ";
+            
+            if (author === "system") {
+                className = "system";
+                prefix = "";
+            } else if (author.toLowerCase() !== "user") {
+                className = "lyra";
+            }
+            
+            if (className === "lyra" || className === "user") {
+                return content.split('\n').filter(l => l.trim() !== "").map(line => `<span class="${className}">${prefix}${line}</span>`).join('<br>');
+            }
+            return `<span class="${className}">${content}</span>`;
+        }
+
+        function scrollToBottom() {
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        chatInput.addEventListener('keydown', async (e) => {
+            if (e.key === 'Enter') {
+                const msg = chatInput.value.trim();
+                if (!msg) return;
+
+                // Optimistic UI update
+                const userMsgDiv = document.createElement('div');
+                userMsgDiv.className = 'line';
+                userMsgDiv.innerHTML = formatMessage('user', msg);
+                chatLog.appendChild(userMsgDiv);
+
+                const thinkingDiv = document.createElement('div');
+                thinkingDiv.className = 'line lyra';
+                thinkingDiv.id = 'thinking-msg';
+                thinkingDiv.innerHTML = '&gt; [thinking...]';
+                chatLog.appendChild(thinkingDiv);
+
+                chatInput.value = '';
+                chatInput.disabled = true;
+                scrollToBottom();
+
+                try {
+                    const res = await fetch(`${API_BASE}/sendMessage`, {
+                        method: 'POST',
+                        headers: { 
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`
+                        },
+                        body: JSON.stringify({ message: msg })
+                    });
+                    
+                    const data = await res.json();
+                    
+                    const tDiv = document.getElementById('thinking-msg');
+                    if (tDiv) tDiv.remove();
+
+                    if (res.ok && data.reply) {
+                        seenMessageContent.add(data.reply);
+                        const replyDiv = document.createElement('div');
+                        replyDiv.className = 'line';
+                        replyDiv.innerHTML = formatMessage('lyra', data.reply);
+                        chatLog.appendChild(replyDiv);
+                    }
+                } catch (err) {
+                    const tDiv = document.getElementById('thinking-msg');
+                    if (tDiv) tDiv.remove();
+                    
+                    const errDiv = document.createElement('div');
+                    errDiv.className = 'line system';
+                    errDiv.innerHTML = `system: connection timeout or error.`;
+                    chatLog.appendChild(errDiv);
+                }
+
+                chatInput.disabled = false;
+                chatInput.focus();
+                scrollToBottom();
+            }
+        });
+
+        // --- POLLING LOGIC ---
+        
+        async function refinedPoll() {
+            try {
+                const res = await fetch(`${API_BASE}/getMessages?last_id=${lastId}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                if (res.ok) {
+                    const data = await res.json();
+                    
+                    if (data.mind_state) {
+                        const parts = data.mind_state.split(':');
+                        if (parts.length === 4) {
+                            metrics.innerHTML = `MA:${parts[0]}, NE:${parts[1]}, PE:${parts[2]}, UA:${parts[3]} | HR:${parseFloat(data.heartrate).toFixed(1)} | EN:${parseFloat(data.mental_energy).toFixed(0)}`;
+                        }
+                    }
+
+                    if (data.messages && data.messages.length > 0) {
+                        let appended = false;
+                        data.messages.forEach(msg => {
+                            if (msg.id > lastId) lastId = msg.id;
+                            
+                            if (!seenMessageContent.has(msg.content) && msg.author !== "user") {
+                                seenMessageContent.add(msg.content);
+                                const msgDiv = document.createElement('div');
+                                msgDiv.className = 'line';
+                                msgDiv.innerHTML = formatMessage(msg.author, msg.content);
+                                chatLog.appendChild(msgDiv);
+                                appended = true;
+                            }
+                        });
+                        if (appended) scrollToBottom();
+                    }
+                }
+            } catch (err) {}
+        }
+
+        function startPolling() {
+            fetch(`${API_BASE}/getMessages`, { headers: { 'Authorization': `Bearer ${token}` } })
+            .then(res => res.json())
+            .then(data => {
+                if (data.messages && data.messages.length > 0) {
+                    lastId = data.messages[data.messages.length - 1].id;
+                }
+                setInterval(refinedPoll, 5000);
+            }).catch(err => {
+                setInterval(refinedPoll, 5000);
+            });
+        }
+    </script>
+</body>
+</html>

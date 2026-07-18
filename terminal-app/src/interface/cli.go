@@ -22,6 +22,7 @@ import (
 	"terminal-app/src/idle_methods/consolidation"
 	episode_memory "terminal-app/src/idle_methods/episode_memory"
 	"terminal-app/src/idle_methods/reflector"
+	"terminal-app/src/interface/api"
 	"terminal-app/src/reactor"
 	"terminal-app/src/responder"
 )
@@ -226,6 +227,7 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 		func() bool { return hasUnconsolidated },
 	)
 	sched.Engine.SetMentalEnergy(savedMentalEnergy) // Restore mental energy from CSV
+	sched.Engine.SetSleepMode(2) // Default to Hibernation
 	go sched.Run(context.Background())
 
 	// Initialize Readline
@@ -239,7 +241,7 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 	}
 	defer rl.Close()
 
-	// Background input reader
+	// Background input queue manager
 	inputChan := make(chan string)
 	go func() {
 		for {
@@ -255,6 +257,33 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 			inputChan <- strings.TrimSpace(line)
 		}
 	}()
+
+	apiInputChan := make(chan api.ChatInput)
+
+	processChan := make(chan api.ChatInput)
+	go func() {
+		var queue []api.ChatInput
+		for {
+			var first api.ChatInput
+			var sendChan chan<- api.ChatInput
+			if len(queue) > 0 {
+				first = queue[0]
+				sendChan = processChan
+			}
+			
+			select {
+			case msg := <-inputChan:
+				queue = append(queue, api.ChatInput{Message: msg})
+			case msg := <-apiInputChan:
+				queue = append(queue, msg)
+			case sendChan <- first:
+				queue = queue[1:]
+			}
+		}
+	}()
+
+	// Start API server
+	go api.StartServer(apiInputChan, historyMgr, sched, func() string { return mindState })
 	
 	// Global OS Signal Listener for crashes/kills
 	sigChan := make(chan os.Signal, 1)
@@ -269,7 +298,17 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 	}()
 	
 	for {
+		var activeProcessChan <-chan api.ChatInput
+		var lockTimer <-chan time.Time
+		if time.Now().After(inputLockedUntil) {
+			activeProcessChan = processChan
+		} else {
+			lockTimer = time.After(time.Until(inputLockedUntil))
+		}
+
 		select {
+		case <-lockTimer:
+			// Wake up when input lock expires
 		case evt := <-sched.EventChan:
 			switch evt {
 			case escalator.EventConsolidate:
@@ -378,13 +417,17 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 				}
 			}
 
-		case rawInput := <-inputChan:
-			if time.Now().Before(inputLockedUntil) {
-				// Discard input during lock
-				continue
+		case rawInput := <-activeProcessChan:
+			if sched.Engine.GetCurrentSleepMode() == 2 {
+				sched.Engine.SetSleepMode(0) // Wake up
+				sysMsg := "[System: you just woke up from sleep]"
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				reactorSTM.Update("system", sysMsg)
+				responderSTM.Update("system", sysMsg)
+				fmt.Fprintf(rl.Stdout(), "\033[90m%s\033[0m\n", sysMsg)
 			}
 
-			input := strings.TrimSpace(rawInput)
+			input := strings.TrimSpace(rawInput.Message)
 			if input == "" {
 				continue
 			}
@@ -449,11 +492,13 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 				}
 				continue
 			} else if input == ">>exit" {
+				fmt.Fprintf(rl.Stdout(), "\r\033[K")
 				sysMsg := "session has ended"
 				_ = historyMgr.Save("system", sysMsg, mindState)
 				updateSessionCSV(historyMgr.SessionID, mindState, sched.Engine.GetMentalEnergy())
 				return
 			} else if input == ">>sigint" || input == ">>eof" {
+				fmt.Fprintf(rl.Stdout(), "\r\033[K")
 				sysMsg := "session ended abruptly"
 				_ = historyMgr.Save("system", sysMsg, mindState)
 				updateSessionCSV(historyMgr.SessionID, mindState, sched.Engine.GetMentalEnergy())
@@ -494,7 +539,13 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 					fmt.Fprintf(rl.Stdout(), "[DEBUG] Model attention is < 0.20. Randomly skipping this turn (1/3 chance).\n")
 				}
 				
+				
 				reply := "no response"
+				
+				if rawInput.ResponseChan != nil {
+					rawInput.ResponseChan <- reply
+				}
+
 				fmt.Fprintf(rl.Stdout(), "\033[34m> %s\033[0m\n", reply)
 				_ = historyMgr.Save(personalityName, reply, mindState)
 				responderSTM.Update("assistant", reply)
@@ -562,6 +613,10 @@ func Run(newSession bool, reuseSession string, debugMode bool) {
 				_ = historyMgr.Save(personalityName, reply, mindState)
 				responderSTM.Update("assistant", reply)
 				reactorSTM.Update("assistant", reply)
+
+				if rawInput.ResponseChan != nil {
+					rawInput.ResponseChan <- reply
+				}
 
 				for _, line := range strings.Split(reply, "\n") {
 					if strings.TrimSpace(line) != "" {

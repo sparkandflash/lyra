@@ -23,7 +23,7 @@ func main() {
 	// Load .env relative to the executable path for standalone support
 	_ = godotenv.Load(utils.ResolvePath(".env"))
 
-	fmt.Println("Initializing Lyra. Validating agent credentials...")
+	fmt.Println("Initializing systems. Validating agent credentials...")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
