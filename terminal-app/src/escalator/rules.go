@@ -195,18 +195,22 @@ func (e *RuleEngine) EvaluateState(mindState string, hasUnconsolidatedMessages b
 	return EventNothing
 }
 
-// AcknowledgeEvent updates the timestamp for when an event was successfully fired.
+// AcknowledgeEvent updates the timestamp for when an event was successfully fired and consumes mental energy.
 func (e *RuleEngine) AcknowledgeEvent(evt EventType) {
 	now := time.Now()
 	switch evt {
 	case EventConsolidate:
 		e.LastConsolidation = now
+		e.ConsumeEnergy(5.0) // Consolidating takes a little energy
 	case EventReflect:
 		e.LastReflection = now
+		e.ConsumeEnergy(15.0) // Reflection takes more cognitive effort
 	case EventProactiveMessage:
 		e.LastProactiveMessage = now
 		e.LastAssistantMessage = now
+		e.ConsumeEnergy(10.0) // Same cost as a normal response
 	case EventIntrospect:
 		e.LastIntrospection = now
+		e.ConsumeEnergy(20.0) // Deep introspection takes the most energy
 	}
 }

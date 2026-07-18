@@ -52,13 +52,18 @@ func NewRuleEngine() *RuleEngine {
 	}
 }
 
-// OnResponse is called each time Lyra sends a reply.
-// It drains mental energy by 10 and slightly drops the heartrate.
-func (e *RuleEngine) OnResponse() {
-	e.MentalEnergy -= 10.0
+// ConsumeEnergy deducts mental energy and clamps to 0.
+func (e *RuleEngine) ConsumeEnergy(amount float64) {
+	e.MentalEnergy -= amount
 	if e.MentalEnergy < 0 {
 		e.MentalEnergy = 0
 	}
+}
+
+// OnResponse is called each time Lyra sends a reply.
+// It drains mental energy by 10 and slightly drops the heartrate.
+func (e *RuleEngine) OnResponse() {
+	e.ConsumeEnergy(10.0)
 	// Each response costs a little HR too (cognitive effort)
 	e.Heartrate -= 2.0
 	if e.Heartrate < 40.0 {
