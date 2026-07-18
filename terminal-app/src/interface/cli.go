@@ -247,7 +247,8 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			os.Exit(1)
 		}
 		defer rl.Close()
-		outWriter = outWriter
+	} else {
+		// No readline, everything just uses standard outWriter = os.Stdout
 	}
 
 	// Background input queue manager

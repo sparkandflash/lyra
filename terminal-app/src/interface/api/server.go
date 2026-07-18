@@ -51,6 +51,7 @@ func StartServer(inputChan chan<- ChatInput, historyMgr *consolidator.HistoryMan
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleHealth)
 	mux.HandleFunc("/login", s.handleLogin)
 	mux.HandleFunc("/getMessages", s.authMiddleware(s.handleGetMessages))
 	mux.HandleFunc("/sendMessage", s.authMiddleware(s.handleSendMessage))
@@ -59,9 +60,39 @@ func StartServer(inputChan chan<- ChatInput, historyMgr *consolidator.HistoryMan
 	if getEnv("DEBUG", "0") == "1" || getEnv("DEBUG", "false") == "true" {
 		fmt.Printf("\033[36m[System: Web API started on port %s]\033[0m\n", port)
 	}
-	if err := http.ListenAndServe(":"+port, mux); err != nil {
+	if err := http.ListenAndServe(":"+port, s.corsMiddleware(mux)); err != nil {
 		fmt.Printf("Web API Error: %v\n", err)
 	}
+}
+
+func (s *Server) corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Set standard CORS headers
+		w.Header().Set("Access-Control-Allow-Origin", "https://lyra.chalkboard.cc")
+		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
+		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
+
+		// If it's a preflight OPTIONS request, stop here and return 200
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "online",
+		"engine": "lyra",
+		"time":   time.Now().Format(time.RFC3339),
+	})
 }
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
