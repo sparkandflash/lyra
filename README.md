@@ -1,6 +1,6 @@
-# The Autonomous Persona Engine
+# Mind-State Roleplay Engine
 
-Welcome to the **Persona Engine**—an experimental project designed to decouple the concept of an AI's "Subconscious System" from its "Personality". 
+Welcome to the **Mind-State Roleplay Engine**—an experimental project designed to decouple the concept of an AI's "Subconscious System" from its "Personality". 
 
 This architecture allows developers to create deeply stateful, emotionally intelligent companions. The underlying engine runs continuously in the background, managing complex memory structures, evaluating emotional context, and initiating proactive actions, while the specific "Persona" is seamlessly loaded on top as the conversational interface.
 
