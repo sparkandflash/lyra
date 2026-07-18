@@ -14,11 +14,7 @@ import (
 	"terminal-app/src/escalator"
 )
 
-var (
-	jwtSecret = []byte(getEnv("JWT_SECRET", "supersecret"))
-	webUser   = getEnv("WEB_USER", "admin")
-	webPass   = getEnv("WEB_PASS", "password")
-)
+// (Globals removed because they evaluated before main() loaded .env)
 
 func getEnv(key, fallback string) string {
 	if value, exists := os.LookupEnv(key); exists {
@@ -111,6 +107,10 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	webUser := getEnv("WEB_USER", "admin")
+	webPass := getEnv("WEB_PASS", "password")
+	jwtSecret := []byte(getEnv("JWT_SECRET", "supersecret"))
+
 	if creds.Username != webUser || creds.Password != webPass {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
@@ -146,6 +146,7 @@ func (s *Server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		tokenString := parts[1]
+		jwtSecret := []byte(getEnv("JWT_SECRET", "supersecret"))
 		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, fmt.Errorf("unexpected signing method")

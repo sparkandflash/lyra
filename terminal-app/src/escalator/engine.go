@@ -73,7 +73,7 @@ func NewRuleEngine() RuleEngine {
 		Heartrate:              70.0,
 		MentalEnergy:           100.0,
 		MovingAverageUserDelay: 10 * time.Second, // Default starting assumption
-		CurrentSleepMode:       0,
+		CurrentSleepMode:       2,                // Default to Hibernation (True Sleep) on startup
 		LastUserMessage:        now,
 		LastAssistantMessage:   now,
 		LastConsolidation:      now,

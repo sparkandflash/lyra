@@ -125,10 +125,22 @@ func (e *DefaultRuleEngine) UpdateHeartrate(mindState string) {
 		e.Heartrate = 180.0
 	}
 
-	// Mental Energy regen: if HR is at or near resting (≤ 72), recover 10 energy per tick.
+	// Mental Energy regen: if HR is at or near resting, recover energy per tick.
 	restingThreshold := 72.0
+	if val := os.Getenv("SYSTEM_RECOVERY_HR_THRESHOLD"); val != "" {
+		if v, err := strconv.ParseFloat(val, 64); err == nil {
+			restingThreshold = v
+		}
+	}
+	recoveryRate := 10.0
+	if val := os.Getenv("SYSTEM_ENERGY_RECOVERY_RATE"); val != "" {
+		if v, err := strconv.ParseFloat(val, 64); err == nil {
+			recoveryRate = v
+		}
+	}
+
 	if e.Heartrate <= restingThreshold {
-		e.MentalEnergy += 10.0
+		e.MentalEnergy += recoveryRate
 		if e.MentalEnergy > 100.0 {
 			e.MentalEnergy = 100.0
 		}

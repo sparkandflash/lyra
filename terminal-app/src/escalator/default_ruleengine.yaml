@@ -49,24 +49,24 @@ rules:
 
   # -- Active Background Tasks --
   - name: "Consolidate"
-    condition: "HasUnconsolidatedMessages && TimeSinceConsolidationMins >= SYSTEM_CONSOLIDATION_FREQ_MINS"
+    condition: "MentalEnergy >= 15.0 && HasUnconsolidatedMessages && TimeSinceConsolidationMins >= SYSTEM_CONSOLIDATION_FREQ_MINS"
     action: "CONSOLIDATE"
     priority: 4
 
   - name: "ProactiveMessage"
     # HR is high, model is paying attention, user idle for 30s, and sufficient energy. Cooldown: 1 min
-    condition: "Heartrate > 90.0 && ModelAttention > 0.7 && IdleDurationSecs >= 30 && MentalEnergy > 5.0 && TimeSinceProactiveMins >= 1.0"
+    condition: "CurrentSleepMode == 0 && Heartrate > 90.0 && ModelAttention > 0.7 && IdleDurationSecs >= 30 && MentalEnergy >= 15.0 && TimeSinceProactiveMins >= 1.0"
     action: "PROACTIVE_MESSAGE"
     priority: 3
 
   - name: "Reflect"
     # High engagement (HR > 100 or MA > 0.8), user idle for 15s. Cooldown: 2 mins
-    condition: "(Heartrate > 100.0 || ModelAttention > 0.8) && IdleDurationSecs >= 15 && TimeSinceReflectionMins >= 2.0"
+    condition: "CurrentSleepMode == 0 && MentalEnergy >= 15.0 && (Heartrate > 100.0 || ModelAttention > 0.8) && IdleDurationSecs >= 15 && TimeSinceReflectionMins >= 2.0"
     action: "REFLECT"
     priority: 2
 
   - name: "Introspect"
     # HR cooled down to resting (< 75), user idle for 2 mins. Cooldown: 5 mins
-    condition: "Heartrate < 75.0 && IdleDurationMins >= 2.0 && TimeSinceIntrospectionMins >= 5.0"
+    condition: "CurrentSleepMode == 0 && MentalEnergy >= 15.0 && Heartrate < 75.0 && IdleDurationMins >= 2.0 && TimeSinceIntrospectionMins >= 5.0"
     action: "INTROSPECT"
     priority: 1
