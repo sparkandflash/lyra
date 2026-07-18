@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"fmt"
+	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"lyra/consolidator"
 	"lyra/prompts"
@@ -65,111 +68,108 @@ type Config struct {
 	Model             string
 	LocalBinaryPath   string
 	SystemInstruction string
+	ReactorCharThreshold int
+}
+
+func loadAgentConfig(prefix string, defaultPrompt string) Config {
+	loadEnvFile()
+
+	getType := func() string {
+		if val := os.Getenv("LYRA_" + prefix + "_TYPE"); val != "" {
+			return val
+		}
+		return os.Getenv("LYRA_RESPONDER_TYPE") // Base fallback for type (legacy support)
+	}
+
+	getVar := func(name string, fallback string) string {
+		if val := os.Getenv("LYRA_" + prefix + "_" + name); val != "" {
+			return val
+		}
+		return os.Getenv(fallback)
+	}
+
+	sysInst := getVar("SYSTEM_INSTRUCTION", "LYRA_SYSTEM_INSTRUCTION")
+	if sysInst == "" {
+		sysInst = defaultPrompt
+	}
+
+	return Config{
+		Type:              strings.ToLower(strings.TrimSpace(getType())),
+		APIKey:            getVar("API_KEY", "LYRA_API_KEY"),
+		BaseURL:           getVar("BASE_URL", "LYRA_BASE_URL"),
+		Model:             getVar("MODEL", "LYRA_MODEL"),
+		LocalBinaryPath:   getVar("LOCAL_BINARY_PATH", "LYRA_LOCAL_BINARY_PATH"),
+		SystemInstruction: sysInst,
+	}
 }
 
 // LoadConfigFromEnv reads configurations from environment variables.
 func LoadConfigFromEnv() Config {
-	return Config{
-		Type:              strings.ToLower(strings.TrimSpace(os.Getenv("LYRA_RESPONDER_TYPE"))),
-		APIKey:            os.Getenv("LYRA_API_KEY"),
-		BaseURL:           os.Getenv("LYRA_BASE_URL"),
-		Model:             os.Getenv("LYRA_MODEL"),
-		LocalBinaryPath:   os.Getenv("LYRA_LOCAL_BINARY_PATH"),
-		SystemInstruction: os.Getenv("LYRA_SYSTEM_INSTRUCTION"),
-	}
+	return loadAgentConfig("RESPONDER", prompts.GetResponderPrompt())
 }
 
-// LoadReactorConfigFromEnv reads reactor-specific configurations from environment variables,
-// falling back to standard responder variables if the reactor-specific ones are not set.
+// LoadReactorConfigFromEnv reads reactor-specific configurations from environment variables.
 func LoadReactorConfigFromEnv() Config {
-	loadEnvFile() // Ensure the .env file is loaded before parsing config
-
-	rType := os.Getenv("LYRA_REACTOR_TYPE")
-	if rType == "" {
-		rType = os.Getenv("LYRA_RESPONDER_TYPE")
+	cfg := loadAgentConfig("REACTOR", prompts.GetReactorPrompt())
+	
+	thresholdStr := os.Getenv("LYRA_REACTOR_CHAR_THRESHOLD")
+	if thresholdStr == "" {
+		cfg.ReactorCharThreshold = 600
+	} else {
+		var err error
+		if _, err = fmt.Sscanf(thresholdStr, "%d", &cfg.ReactorCharThreshold); err != nil {
+			cfg.ReactorCharThreshold = 600
+		}
 	}
-
-	apiKey := os.Getenv("LYRA_REACTOR_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("LYRA_API_KEY")
-	}
-
-	baseURL := os.Getenv("LYRA_REACTOR_BASE_URL")
-	if baseURL == "" {
-		baseURL = os.Getenv("LYRA_BASE_URL")
-	}
-
-	model := os.Getenv("LYRA_REACTOR_MODEL")
-	if model == "" {
-		model = os.Getenv("LYRA_MODEL")
-	}
-
-	binaryPath := os.Getenv("LYRA_REACTOR_LOCAL_BINARY_PATH")
-	if binaryPath == "" {
-		binaryPath = os.Getenv("LYRA_LOCAL_BINARY_PATH")
-	}
-
-	sysInst := os.Getenv("LYRA_REACTOR_SYSTEM_INSTRUCTION")
-	if sysInst == "" {
-		sysInst = os.Getenv("LYRA_SYSTEM_INSTRUCTION")
-	}
-	if sysInst == "" {
-		sysInst = prompts.GetReactorPrompt()
-	}
-
-	return Config{
-		Type:              strings.ToLower(strings.TrimSpace(rType)),
-		APIKey:            apiKey,
-		BaseURL:           baseURL,
-		Model:             model,
-		LocalBinaryPath:   binaryPath,
-		SystemInstruction: sysInst,
-	}
+	return cfg
 }
 
-// LoadSummariserConfigFromEnv reads summariser-specific configurations from environment variables,
-// falling back to standard responder variables if the summariser-specific ones are not set.
+// LoadSummariserConfigFromEnv reads summariser-specific configurations from environment variables.
 func LoadSummariserConfigFromEnv() Config {
-	loadEnvFile() // Ensure the .env file is loaded before parsing config
+	return loadAgentConfig("SUMMARISER", prompts.GetConsolidationPrompt())
+}
 
-	sType := os.Getenv("LYRA_SUMMARISER_TYPE")
-	if sType == "" {
-		sType = os.Getenv("LYRA_RESPONDER_TYPE")
+// ValidateConfig pings the provider's /models endpoint to verify credentials.
+func ValidateConfig(ctx context.Context, cfg Config) error {
+	if cfg.Type == "mock" || cfg.Type == "embedded" || cfg.Type == "local-binary" || cfg.Type == "" {
+		return nil // skip validation for local/mock
 	}
 
-	apiKey := os.Getenv("LYRA_SUMMARISER_API_KEY")
-	if apiKey == "" {
-		apiKey = os.Getenv("LYRA_API_KEY")
+	var url string
+	var req *http.Request
+	var err error
+
+	if cfg.Type == "gemini" {
+		url = fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models?key=%s", cfg.APIKey)
+		req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
+	} else if cfg.Type == "openai" {
+		if cfg.BaseURL == "" {
+			return fmt.Errorf("missing base URL")
+		}
+		url = fmt.Sprintf("%s/models", strings.TrimSuffix(cfg.BaseURL, "/"))
+		req, err = http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err == nil && cfg.APIKey != "" {
+			req.Header.Set("Authorization", "Bearer "+cfg.APIKey)
+		}
+	} else {
+		return fmt.Errorf("unknown config type %q", cfg.Type)
 	}
 
-	baseURL := os.Getenv("LYRA_SUMMARISER_BASE_URL")
-	if baseURL == "" {
-		baseURL = os.Getenv("LYRA_BASE_URL")
+	if err != nil {
+		return err
 	}
 
-	model := os.Getenv("LYRA_SUMMARISER_MODEL")
-	if model == "" {
-		model = os.Getenv("LYRA_MODEL")
+	client := &http.Client{Timeout: 5 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
 	}
+	defer resp.Body.Close()
 
-	binaryPath := os.Getenv("LYRA_SUMMARISER_LOCAL_BINARY_PATH")
-	if binaryPath == "" {
-		binaryPath = os.Getenv("LYRA_LOCAL_BINARY_PATH")
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("status code %d from %s", resp.StatusCode, url)
 	}
-
-	sysInst := os.Getenv("LYRA_SUMMARISER_SYSTEM_INSTRUCTION")
-	if sysInst == "" {
-		sysInst = prompts.GetConsolidationPrompt()
-	}
-
-	return Config{
-		Type:              strings.ToLower(strings.TrimSpace(sType)),
-		APIKey:            apiKey,
-		BaseURL:           baseURL,
-		Model:             model,
-		LocalBinaryPath:   binaryPath,
-		SystemInstruction: sysInst,
-	}
+	return nil
 }
 
 // loadEnvFile parses the local .env file and sets environment variables if they are not already set.

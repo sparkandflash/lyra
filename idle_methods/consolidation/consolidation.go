@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"lyra/consolidator"
 	"lyra/summariser"
@@ -61,9 +62,9 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 		return nil, fmt.Errorf("no new messages to consolidate")
 	}
 
-	// Determine character limit
-	maxChars := 1500
-	if limitStr := os.Getenv("LYRA_MAX_WORKING_MEMORY_CHARS"); limitStr != "" {
+	// Determine character limit for consolidation chunking
+	maxChars := 3000
+	if limitStr := os.Getenv("LYRA_CONSOLIDATION_DENSITY"); limitStr != "" {
 		var limit int
 		if _, err := fmt.Sscanf(limitStr, "%d", &limit); err == nil && limit > 0 {
 			maxChars = limit
@@ -101,7 +102,12 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 
 	var newEpisodes []EpisodeSummary
 
-	// Process each chunk
+	// ONLY process the first chunk to spread out API calls and avoid rate limits.
+	if len(chunks) > 1 {
+		chunks = chunks[:1]
+	}
+
+	// Process the chunk
 	for chunkIdx, indices := range chunks {
 		var chunkMsgs []consolidator.Message
 		var convBuilder strings.Builder
@@ -140,8 +146,8 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 			}
 		}
 
-		// Save Episode JSON
-		episodeID := fmt.Sprintf("%s_ep_%d", hm.SessionID, chunkIdx+1)
+		// Save Episode JSON. Use UnixNano to ensure uniqueness across multiple consolidation runs.
+		episodeID := fmt.Sprintf("%s_ep_%d", hm.SessionID, time.Now().UnixNano())
 		episode := Episode{
 			ID:            episodeID,
 			Summary:       llmResp.Summary,

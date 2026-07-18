@@ -1,6 +1,7 @@
 package escalator
 
 import (
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -104,8 +105,14 @@ func (e *RuleEngine) EvaluateState(mindState string, hasUnconsolidatedMessages b
 		ma, _ = strconv.ParseFloat(parts[0], 64)
 	}
 
-	// 1. Consolidation (Timer driven, every 1 minute)
-	if hasUnconsolidatedMessages && now.Sub(e.LastConsolidation) >= 1*time.Minute {
+	// 1. Consolidation (Timer driven, default 1 minute)
+	freqMins := 1
+	if val := os.Getenv("LYRA_CONSOLIDATION_FREQ_MINS"); val != "" {
+		if m, err := strconv.Atoi(val); err == nil && m > 0 {
+			freqMins = m
+		}
+	}
+	if hasUnconsolidatedMessages && now.Sub(e.LastConsolidation) >= time.Duration(freqMins)*time.Minute {
 		return EventConsolidate
 	}
 

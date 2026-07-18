@@ -38,14 +38,23 @@ While chatting with Lyra, you can use these special commands:
 
 Lyra automatically loads environment variables from a local `.env` file at startup. An extensive template is provided in [`.env.example`](.env.example). 
 
-### Global Fallbacks
-If agent-specific variables are omitted, Lyra falls back to the global defaults:
-* `LYRA_RESPONDER_TYPE`, `LYRA_API_KEY`, `LYRA_BASE_URL`, `LYRA_MODEL`, `LYRA_LOCAL_BINARY_PATH`, `LYRA_SYSTEM_INSTRUCTION`
+### Layered Agent Configurations
+Lyra uses a **hierarchical configuration system** to manage its three primary agents (Responder, Reactor, and Summariser). 
 
-### Sub-Agents & Memory Variables
-* **Responder:** `LYRA_RESPONDER_STM_CHARS` (default 2000)
-* **Reactor:** `LYRA_MAX_WORKING_MEMORY_CHARS` (default 2000) - limits the context window sent to the mindstate analysis.
-* **Episode Memory:** `LYRA_EPISODE_MEMORY_CHARS` (default 2000) - total character budget for active loaded episodes.
+1. **Agent-Specific Variables**: Each agent can be configured with its own dedicated endpoint, model, and API key. For example, `LYRA_REACTOR_API_KEY` and `LYRA_SUMMARISER_MODEL`.
+2. **Base Fallbacks**: If an agent-specific variable is missing, Lyra gracefully falls back to the global base variable (e.g., `LYRA_API_KEY`, `LYRA_BASE_URL`, `LYRA_MODEL`).
+
+This allows you to run the heavy conversation agent on a high-tier model (e.g., GPT-4o) while offloading the background Reactor and Summariser tasks to cheaper, faster models (e.g., Gemma on Cerebras) using entirely different API keys.
+
+### Pre-Flight Validation
+When Lyra starts up, she performs a pre-flight credential check. The system pings the `/models` endpoint of each configured provider for the Responder, Reactor, and Summariser. 
+*   **Validation is free and instantaneous** (it does not consume token generation credits).
+*   If any agent's credentials or connection fails, the bot will immediately abort with a fatal error rather than crashing silently mid-conversation.
+
+### Memory Variables
+* **Responder:** `LYRA_RESPONDER_STM_CHARS` (default 4000)
+* **Reactor:** `LYRA_MAX_WORKING_MEMORY_CHARS` (default 3000) - limits the context window sent to the mindstate analysis.
+* **Episode Memory:** `LYRA_EPISODE_MEMORY_CHARS` (default 8000) - total character budget for active loaded episodes.
 
 ---
 

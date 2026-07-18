@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,7 +66,35 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 	cleanedJSON := cleanJSONResponse(rawResponse)
 	var resp ReactorResponse
 	if err := json.Unmarshal([]byte(cleanedJSON), &resp); err != nil {
-		return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, fmt.Errorf("failed to parse reactor JSON output %q: %w", cleanedJSON, err)
+		// Fallback: robust regex parsing if the LLM hallucinates malformed JSON
+		extractFloat := func(key string) float64 {
+			idx := strings.Index(rawResponse, key)
+			if idx == -1 {
+				return -1.0
+			}
+			sub := rawResponse[idx+len(key):]
+			re := regexp.MustCompile(`[0-9]+\.[0-9]+`)
+			match := re.FindString(sub)
+			if match == "" {
+				return -1.0
+			}
+			val, _ := strconv.ParseFloat(match, 64)
+			return val
+		}
+
+		ma := extractFloat("model_attention")
+		ne := extractFloat("negative_emotion")
+		pe := extractFloat("positive_emotion")
+		ua := extractFloat("user_attention")
+
+		if ma >= 0 && ne >= 0 && pe >= 0 && ua >= 0 {
+			resp.ModelAttention = ma
+			resp.NegativeEmotion = ne
+			resp.PositiveEmotion = pe
+			resp.UserAttention = ua
+		} else {
+			return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, fmt.Errorf("failed to parse reactor JSON output %q: %w", cleanedJSON, err)
+		}
 	}
 
 	// Helper to clamp values strictly between 0.0 and 1.0
