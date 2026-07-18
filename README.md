@@ -34,6 +34,62 @@ While chatting with Lyra, you can use these special commands:
 
 ---
 
+## System Architecture
+
+```mermaid
+flowchart TD
+    %% Styling
+    classDef interface fill:#1e1e1e,stroke:#333,stroke-width:2px,color:#fff
+    classDef engine fill:#2d3748,stroke:#4a5568,stroke-width:2px,color:#fff
+    classDef agent fill:#3182ce,stroke:#2b6cb0,stroke-width:2px,color:#fff
+    classDef memory fill:#2f855a,stroke:#276749,stroke-width:2px,color:#fff
+
+    subgraph User Layer
+        CLI([Terminal / Readline]):::interface
+    end
+
+    subgraph Core Engine
+        Escalator[Escalator Scheduler & Rule Engine]:::engine
+        Reflector[Reflector Module]:::engine
+    end
+
+    subgraph Multi-Agent System
+        Responder{Responder Agent}:::agent
+        Reactor{Reactor Agent}:::agent
+        Summariser{Summariser Agent}:::agent
+    end
+
+    subgraph Context & Memory
+        STM[(Short-Term Memory)]:::memory
+        EpiMem[(Episodic Memory Pool)]:::memory
+        Disk[(JSON History / index.csv)]:::memory
+    end
+
+    %% Flow
+    CLI <--> |User Input & Async Output| Responder
+    
+    CLI -.-> |>> Commands| Reflector
+    CLI -.-> |>> Commands| Summariser
+
+    Responder <--> |Fetches/Updates| STM
+    Responder <-- |Injects Context| EpiMem
+    
+    Escalator --> |Evaluates Silence| Responder
+    Escalator --> |Triggers Background Tasks| Summariser
+    Escalator --> |Triggers Background Tasks| Reflector
+
+    Reactor --> |Analyzes Context| STM
+    Reactor --> |Updates| Escalator
+    
+    Summariser --> |Consolidates| Disk
+    Summariser --> |Writes| EpiMem
+    
+    Reflector --> |Searches| Disk
+    Reflector --> |Loads into| EpiMem
+```
+
+---
+
 ## Configuration (`.env`)
 
 Lyra automatically loads environment variables from a local `.env` file at startup. An extensive template is provided in [`.env.example`](.env.example). 
