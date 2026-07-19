@@ -30,7 +30,7 @@ jobs:
           username: ${{ secrets.GCP_VM_USERNAME }}
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           source: "terminal-app/terminal-app-linux"
-          target: "/home/${{ secrets.GCP_VM_USERNAME }}/terminal-app"
+          target: "/home/${{ secrets.GCP_VM_USERNAME }}/msrpengine"
           strip_components: 1
 
       - name: Restart Engine Service
@@ -40,6 +40,6 @@ jobs:
           username: ${{ secrets.GCP_VM_USERNAME }}
           key: ${{ secrets.GCP_SSH_PRIVATE_KEY }}
           script: |
-            cd /home/${{ secrets.GCP_VM_USERNAME }}/terminal-app
+            cd /home/${{ secrets.GCP_VM_USERNAME }}/msrpengine
             chmod +x terminal-app-linux
             sudo systemctl restart lyra
