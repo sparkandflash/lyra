@@ -13,23 +13,25 @@ Traditional LLMs are stateless request-response machines. This engine transforms
 
 ## Engine Features
 
-### 1. Emotional "Mindstate" Tracking
-The System continuously monitors four emotional axes during conversation:
+### 1. Biological "Mindstate" Tracking
+The System continuously monitors five indicators during conversation:
 *   `Model Attention`
-*   `Negative Emotion`
-*   `Positive Emotion`
 *   `User Attention`
+*   `Serotonin` (Happiness / Sadness)
+*   `Oxytocin` (Trust / Fear)
+*   `Cortisol` (Stress / Relaxation)
 
-These scores dictate the engine's behavior. A high negative emotion might trigger the Persona to respond more empathetically, while low mental energy forces the Persona to give short, exhausted responses.
+These biological states dictate the engine's behavior. A high Cortisol score triggers the Persona to act panicked or stressed, while low Oxytocin triggers defensiveness. Crucially, these hormones act as multipliers for the engine's physical exhaustion.
 
 ### 2. Dual-Memory System
 *   **Short-Term Memory (STM):** A highly constrained, rolling buffer of the immediate conversation.
 *   **Long-Term Episodic Memory:** The System runs background "Consolidation" agents that read raw STM logs, summarize them, extract keywords, and bake them into permanent JSON "episodes" stored on disk. When similar topics arise in the future, a "Reflector" agent dynamically fetches relevant past episodes and injects them into the Persona's context window.
 
 ### 3. Biological Rhythms (Escalator)
-The engine simulates fatigue and arousal:
-*   **Heartrate:** Spikes during intense emotional exchanges, causing the System to process information faster.
-*   **Mental Energy:** Slowly depletes while the Persona is active. If energy drops to zero, the engine forces the Persona to give terse, exhausted responses until the user allows it to "sleep" and recharge.
+The engine simulates fatigue and arousal using a real-time energy pool:
+*   **Mental Energy:** A 1000-point pool that slowly depletes while the Persona is active. 
+*   **Hormonal Drain:** Experiencing extreme emotions (high Cortisol, low Oxytocin) dramatically accelerates the energy drain rate.
+*   **Exhaustion / Sleep:** If energy drops critically low (below 400), the engine physically overrides the Persona, forcing it to ignore the user with a system-level "no response" until it enters an idle or hibernation sleep cycle to naturally regenerate.
 
 ### 4. Portable Directories
 The engine is self-contained within a portable directory containing the executable and its `.bin/` sidecar ML engine. You can compile a specific Persona and run it anywhere on your computer—it automatically spins up its own isolated context folders and configuration right next to itself.
