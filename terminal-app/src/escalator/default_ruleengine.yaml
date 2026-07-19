@@ -2,9 +2,9 @@ hr_modifiers:
   # Base condition spikes
   - condition: "ModelAttention > 0.8 || UserAttention > 0.8"
     effect: "2.0 * EnergyFactor"
-  - condition: "NegativeEmotion > 0.7 || PositiveEmotion > 0.7"
+  - condition: "Cortisol > 0.7 || Serotonin > 0.7 || Oxytocin < -0.7"
     effect: "3.0 * EnergyFactor"
-  - condition: "NegativeEmotion < 0.2 && PositiveEmotion < 0.2 && ModelAttention < 0.4 && UserAttention < 0.4"
+  - condition: "Cortisol < 0.2 && Serotonin > -0.2 && Serotonin < 0.2 && ModelAttention < 0.4 && UserAttention < 0.4"
     effect: "-1.0"
   - condition: "IdleDurationMins > 2.0"
     effect: "-0.5"

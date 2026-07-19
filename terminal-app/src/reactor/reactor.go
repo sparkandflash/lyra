@@ -18,10 +18,11 @@ import (
 
 // ReactorResponse represents the structured JSON output expected from the LLM.
 type ReactorResponse struct {
-	ModelAttention  float64 `json:"model_attention"`
-	NegativeEmotion float64 `json:"negative_emotion"`
-	PositiveEmotion float64 `json:"positive_emotion"`
-	UserAttention   float64 `json:"user_attention"`
+	ModelAttention float64 `json:"model_attention"`
+	UserAttention  float64 `json:"user_attention"`
+	Serotonin      float64 `json:"serotonin"`
+	Oxytocin       float64 `json:"oxytocin"`
+	Cortisol       float64 `json:"cortisol"`
 }
 
 // ReactorAgent analyzes conversation history to output heart rate adjustments.
@@ -39,7 +40,7 @@ func NewReactorAgent() *ReactorAgent {
 // React decides the mindstate scores based on the conversation history.
 func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message) (ReactorResponse, error) {
 	if len(history) == 0 {
-		return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, nil
+		return ReactorResponse{ModelAttention: 0.1, UserAttention: 0.7, Serotonin: 0.1, Oxytocin: 0.1, Cortisol: 0.1}, nil
 	}
 
 	// Use mock behavior if using mock responder or if no keys are configured.
@@ -50,7 +51,7 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 	// Format conversation history for LLM review
 	historyBytes, err := json.Marshal(history)
 	if err != nil {
-		return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, fmt.Errorf("failed to marshal history for reactor: %w", err)
+		return ReactorResponse{ModelAttention: 0.1, UserAttention: 0.7, Serotonin: 0.1, Oxytocin: 0.1, Cortisol: 0.1}, fmt.Errorf("failed to marshal history for reactor: %w", err)
 	}
 
 	systemInstruction := r.config.SystemInstruction
@@ -60,7 +61,7 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 
 	rawResponse, err := r.callLLM(ctx, string(historyBytes), systemInstruction)
 	if err != nil {
-		return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, fmt.Errorf("reactor LLM call failed: %w", err)
+		return ReactorResponse{ModelAttention: 0.1, UserAttention: 0.7, Serotonin: 0.1, Oxytocin: 0.1, Cortisol: 0.1}, fmt.Errorf("reactor LLM call failed: %w", err)
 	}
 
 	cleanedJSON := cleanJSONResponse(rawResponse)
@@ -83,36 +84,34 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 		}
 
 		ma := extractFloat("model_attention")
-		ne := extractFloat("negative_emotion")
-		pe := extractFloat("positive_emotion")
 		ua := extractFloat("user_attention")
+		se := extractFloat("serotonin")
+		ox := extractFloat("oxytocin")
+		co := extractFloat("cortisol")
 
-		if ma >= 0 && ne >= 0 && pe >= 0 && ua >= 0 {
+		if ma >= -1.0 && ua >= -1.0 && se >= -1.0 && ox >= -1.0 && co >= -1.0 {
 			resp.ModelAttention = ma
-			resp.NegativeEmotion = ne
-			resp.PositiveEmotion = pe
 			resp.UserAttention = ua
+			resp.Serotonin = se
+			resp.Oxytocin = ox
+			resp.Cortisol = co
 		} else {
-			return ReactorResponse{ModelAttention: 0.9, NegativeEmotion: 0.3, PositiveEmotion: 0.5, UserAttention: 0.7}, fmt.Errorf("failed to parse reactor JSON output %q: %w", cleanedJSON, err)
+			return ReactorResponse{ModelAttention: 0.1, UserAttention: 0.7, Serotonin: 0.1, Oxytocin: 0.1, Cortisol: 0.1}, fmt.Errorf("failed to parse reactor JSON output %q: %w", cleanedJSON, err)
 		}
 	}
 
-	// Helper to clamp values strictly between 0.0 and 1.0
-	clamp := func(val float64) float64 {
-		if val < 0.0 {
-			return 0.0
-		}
-		if val > 1.0 {
-			return 1.0
-		}
+	clampBi := func(val float64) float64 {
+		if val < -1.0 { return -1.0 }
+		if val > 1.0 { return 1.0 }
 		return val
 	}
 
 	return ReactorResponse{
-		ModelAttention:  clamp(resp.ModelAttention),
-		NegativeEmotion: clamp(resp.NegativeEmotion),
-		PositiveEmotion: clamp(resp.PositiveEmotion),
-		UserAttention:   clamp(resp.UserAttention),
+		ModelAttention: clampBi(resp.ModelAttention),
+		UserAttention:  clampBi(resp.UserAttention),
+		Serotonin:      clampBi(resp.Serotonin),
+		Oxytocin:       clampBi(resp.Oxytocin),
+		Cortisol:       clampBi(resp.Cortisol),
 	}, nil
 }
 
@@ -120,10 +119,11 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 func (r *ReactorAgent) reactMock(history []consolidator.Message) (ReactorResponse, error) {
 	// Initialize default state
 	resp := ReactorResponse{
-		ModelAttention:  0.9,
-		NegativeEmotion: 0.3,
-		PositiveEmotion: 0.5,
-		UserAttention:   0.7,
+		ModelAttention: 0.1,
+		UserAttention:  0.7,
+		Serotonin:      0.1,
+		Oxytocin:       0.1,
+		Cortisol:       0.1,
 	}
 
 	if len(history) == 0 {
@@ -153,17 +153,28 @@ func (r *ReactorAgent) reactMock(history []consolidator.Message) (ReactorRespons
 
 		negativeKeywords := []string{"angry", "hate", "mad", "terrible", "worst", "sarcastic", "resentful", "cursed", "passive aggressive", "roast", "suffer"}
 		positiveKeywords := []string{"happy", "excited", "love", "great", "awesome", "amazing", "wow", "cool", "pride", "nice"}
+		scaryKeywords := []string{"stop", "delete", "die", "kill", "shut up", "warning"}
 
 		for _, word := range negativeKeywords {
 			if strings.Contains(lastUserMsgLower, word) {
-				resp.NegativeEmotion = 0.8
+				resp.Cortisol = 0.8 // Stress
+				resp.Serotonin = -0.5 // Sad
 				break
 			}
 		}
 
 		for _, word := range positiveKeywords {
 			if strings.Contains(lastUserMsgLower, word) {
-				resp.PositiveEmotion = 0.8
+				resp.Serotonin = 0.8 // Happy
+				resp.Cortisol = -0.5 // Relaxed
+				break
+			}
+		}
+
+		for _, word := range scaryKeywords {
+			if strings.Contains(lastUserMsgLower, word) {
+				resp.Oxytocin = -0.8 // Fear (Low trust)
+				resp.Cortisol = 0.9 // Extreme stress
 				break
 			}
 		}

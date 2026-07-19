@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/csv"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -152,7 +151,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 	csvPath := historyDir + "/sessions.csv"
 	var sessionID string
 	var savedMindState string
-	var savedMentalEnergy float64 = 100.0
+	var savedMentalEnergy float64 = 800.0
 
 	if newSession {
 		sessionID = "" // HistoryManager will generate a new one
@@ -195,7 +194,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 		os.Exit(1)
 	}
 
-	mindState := "0.90:0.30:0.50:0.70"
+	mindState := "0.10:0.70:0.10:0.10:0.10"
 	if savedMindState != "" {
 		mindState = savedMindState
 	}
@@ -230,6 +229,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 		func() bool { return hasUnconsolidated },
 	)
 	sched.Engine.SetMentalEnergy(savedMentalEnergy) // Restore mental energy from CSV
+	sched.Engine.CheckBiologicalEvents(mindState)   // Initialize biological state trackers
 	sched.Engine.SetSleepMode(2) // Default to Hibernation
 	go sched.Run(context.Background())
 
@@ -349,9 +349,9 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			case escalator.EventEnterTempSleep:
 				delay := os.Getenv("SYSTEM_TEMP_SLEEP_DELAY_MINS")
 				if delay == "" { delay = "5" }
-				sysMsg := fmt.Sprintf("it has been more than %s mins, starting idle time.", delay)
+				sysMsg := fmt.Sprintf("[System: it has been %s mins since user last responded, starting idle time.]", delay)
 				if debugMode {
-					fmt.Fprintf(outWriter, "\033[90m[System: %s]\033[0m\n", sysMsg)
+					fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", sysMsg)
 				}
 				_ = historyMgr.Save("system", sysMsg, mindState)
 				responderSTM.Update("system", sysMsg)
@@ -360,9 +360,9 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			case escalator.EventEnterTrueSleep:
 				delay := os.Getenv("SYSTEM_TRUE_SLEEP_DELAY_MINS")
 				if delay == "" { delay = "180" }
-				sysMsg := fmt.Sprintf("it has been more than %s mins, starting hiberation.", delay)
+				sysMsg := fmt.Sprintf("[System: it has been %s mins since user last responded, starting hiberation.]", delay)
 				if debugMode {
-					fmt.Fprintf(outWriter, "\033[90m[System: %s]\033[0m\n", sysMsg)
+					fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", sysMsg)
 				}
 				_ = historyMgr.Save("system", sysMsg, mindState)
 				responderSTM.Update("system", sysMsg)
@@ -437,9 +437,17 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 					hasUnconsolidated = true
 
 					if respState, err := reactorAgent.React(ctx, reactorSTM.Get()); err == nil {
-						newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.NegativeEmotion, respState.PositiveEmotion, respState.UserAttention)
-						if newMindState != "0.00:0.00:0.00:0.00" {
+						newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.UserAttention, respState.Serotonin, respState.Oxytocin, respState.Cortisol)
+						if newMindState != "0.00:0.00:0.00:0.00:0.00" {
 							mindState = newMindState
+							if bioEvents := sched.Engine.CheckBiologicalEvents(mindState); bioEvents != "" {
+								if debugMode {
+									fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", bioEvents)
+								}
+								_ = historyMgr.Save("system", bioEvents, mindState)
+								reactorSTM.Update("system", bioEvents)
+								responderSTM.Update("system", bioEvents)
+							}
 						} else if debugMode {
 							fmt.Fprintf(outWriter, "[DEBUG] Reactor Error: parsed 0:0:0:0. Keeping previous mindstate %s\n", mindState)
 						}
@@ -473,7 +481,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			if sched.Engine.GetCurrentSleepMode() == 2 {
 				sched.Engine.SetSleepMode(0) // Wake up
 				lastWakeTime = time.Now()
-				sysMsg := "[System: you just woke up from sleep]"
+				sysMsg := fmt.Sprintf("[System: you just woke up from sleep. The current time is %s]", time.Now().Format("Monday, Jan 2, 3:04 PM"))
 				_ = historyMgr.Save("system", sysMsg, mindState)
 				reactorSTM.Update("system", sysMsg)
 				responderSTM.Update("system", sysMsg)
@@ -489,18 +497,18 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			if input == ">>debug" {
 				uptime := time.Since(lastWakeTime).Round(time.Second)
 				totalUptime := time.Since(engineStartTime).Round(time.Second)
-				fmt.Fprintf(outWriter, "system: mindstate: %s | HR: %.1f | energy: %.0f/100\n", mindState, sched.Engine.GetHeartrate(), sched.Engine.GetMentalEnergy())
+				fmt.Fprintf(outWriter, "system: mindstate: %s | drain: %.2f/s | energy: %.0f/1000\n", mindState, sched.Engine.GetEnergyDrainRate(), sched.Engine.GetMentalEnergy())
 				fmt.Fprintf(outWriter, "system: active episodes: %d | pinned: %q\n", len(episodeMgr.GetActive()), episodeMgr.GetPinnedID())
 				fmt.Fprintf(outWriter, "system: uptime: %v | totalUptime: %v\n", uptime, totalUptime)
 				continue
 			} else if strings.HasPrefix(input, ">>mindstate ") {
 				valStr := strings.TrimSpace(strings.TrimPrefix(input, ">>mindstate "))
-				var ma, ne, pe, ua float64
-				_, err := fmt.Sscanf(valStr, "%f:%f:%f:%f", &ma, &ne, &pe, &ua)
-				if err != nil || ma < 0.0 || ma > 1.0 || ne < 0.0 || ne > 1.0 || pe < 0.0 || pe > 1.0 || ua < 0.0 || ua > 1.0 {
-					fmt.Fprintln(outWriter, "system: error: mindstate must be four floats (0.0 to 1.0) separated by colons (e.g. 0.9:0.3:0.5:0.7).")
+				var ma, ua, se, ox, co float64
+				_, err := fmt.Sscanf(valStr, "%f:%f:%f:%f:%f", &ma, &ua, &se, &ox, &co)
+				if err != nil || ma < -1.0 || ma > 1.0 || ua < -1.0 || ua > 1.0 || se < -1.0 || se > 1.0 || ox < -1.0 || ox > 1.0 || co < -1.0 || co > 1.0 {
+					fmt.Fprintln(outWriter, "system: error: mindstate must be five floats separated by colons (e.g. 0.9:0.7:0.0:0.0:0.0).")
 				} else {
-					mindState = fmt.Sprintf("%.2f:%.2f:%.2f:%.2f", ma, ne, pe, ua)
+					mindState = fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", ma, ua, se, ox, co)
 					fmt.Fprintf(outWriter, "system: mindstate updated to %s.\n", mindState)
 				}
 				continue
@@ -573,15 +581,22 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			var currentMA float64
 			fmt.Sscanf(mindState, "%f:", &currentMA)
 
-			// Skip logic: if MA < 0.20, 1/3 chance to skip processing
-			if currentMA < 0.20 && rand.Float64() < 0.3333 {
+			// Skip logic: if MA < 0.0 and Energy < 400, explicitly ignore the user
+			if currentMA < 0.0 && sched.Engine.GetMentalEnergy() < 400.0 {
 				time.Sleep(time.Until(startTime.Add(3 * time.Second)))
 				done <- true
 				
 				if debugMode {
-					fmt.Fprintf(outWriter, "[DEBUG] Model attention is < 0.20. Randomly skipping this turn (1/3 chance).\n")
+					fmt.Fprintf(outWriter, "[DEBUG] Model attention < 0.0 and Energy < 400. Skipping this turn.\n")
 				}
 				
+				sysMsg := "[System: You felt too exhausted and uninterested to reply. You ignored the user.]"
+				if debugMode {
+					fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", sysMsg)
+				}
+				_ = historyMgr.Save("system", sysMsg, mindState)
+				reactorSTM.Update("system", sysMsg)
+				responderSTM.Update("system", sysMsg)
 				
 				reply := "no response"
 				
@@ -600,9 +615,17 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			unreactedChars += len(input)
 			if unreactedChars >= reactorCharThreshold {
 				if respState, err := reactorAgent.React(ctx, reactorSTM.Get()); err == nil {
-					newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.NegativeEmotion, respState.PositiveEmotion, respState.UserAttention)
-					if newMindState != "0.00:0.00:0.00:0.00" {
+					newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.UserAttention, respState.Serotonin, respState.Oxytocin, respState.Cortisol)
+					if newMindState != "0.00:0.00:0.00:0.00:0.00" {
 						mindState = newMindState
+						if bioEvents := sched.Engine.CheckBiologicalEvents(mindState); bioEvents != "" {
+							if debugMode {
+								fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", bioEvents)
+							}
+							_ = historyMgr.Save("system", bioEvents, mindState)
+							reactorSTM.Update("system", bioEvents)
+							responderSTM.Update("system", bioEvents)
+						}
 						unreactedChars = 0
 						if debugMode {
 							fmt.Fprintf(outWriter, "[DEBUG] Reactor (Pre-Response): Mindstate updated to %s\n", mindState)
@@ -624,7 +647,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 
 			// Respond using responder's clean STM (no stored flags) + active episodes
 			// Pass mental energy as a length hint appended to the mindstate string.
-			energyHint := fmt.Sprintf("%s|energy:%.0f", mindState, sched.Engine.GetMentalEnergy())
+			energyHint := fmt.Sprintf("%s|energy:%.0f|drain_rate:%.1f/s", mindState, sched.Engine.GetMentalEnergy(), sched.Engine.GetEnergyDrainRate())
 			reply, usefulEpisodeID, err := resp.Respond(ctx, input, energyHint, responderSTM.GetNoFlags(), episodes)
 			if err != nil {
 				done <- true
@@ -643,9 +666,17 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 				unreactedChars += len(reply)
 				if unreactedChars >= reactorCharThreshold {
 					if respState, err := reactorAgent.React(ctx, reactorSTM.Get()); err == nil {
-						newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.NegativeEmotion, respState.PositiveEmotion, respState.UserAttention)
-						if newMindState != "0.00:0.00:0.00:0.00" {
+						newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.UserAttention, respState.Serotonin, respState.Oxytocin, respState.Cortisol)
+						if newMindState != "0.00:0.00:0.00:0.00:0.00" {
 							mindState = newMindState
+							if bioEvents := sched.Engine.CheckBiologicalEvents(mindState); bioEvents != "" {
+								if debugMode {
+									fmt.Fprintf(outWriter, "\033[90m%s\033[0m\n", bioEvents)
+								}
+								_ = historyMgr.Save("system", bioEvents, mindState)
+								reactorSTM.Update("system", bioEvents)
+								responderSTM.Update("system", bioEvents)
+							}
 							unreactedChars = 0
 							if debugMode {
 								fmt.Fprintf(outWriter, "[DEBUG] Reactor (Post-Response): Mindstate updated to %s\n", mindState)

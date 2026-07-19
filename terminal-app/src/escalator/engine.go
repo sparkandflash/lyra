@@ -31,14 +31,16 @@ type RuleEngine interface {
 	SetMentalEnergy(energy float64)
 	GetCurrentSleepMode() int
 	SetSleepMode(mode int)
+	GetEnergyDrainRate() float64
+	CheckBiologicalEvents(newMindState string) string
 }
 
 // DefaultRuleEngine maintains internal state (like Heartrate) and deterministically
 // evaluates rules to emit events based on an embedded YAML rules file.
 type DefaultRuleEngine struct {
-	// Internal State
 	Heartrate              float64
-	MentalEnergy           float64 // 0–100. Drains per response, regens at resting HR.
+	MentalEnergy           float64 // 0–1000.
+	CurrentDrainRate       float64
 	MovingAverageUserDelay time.Duration
 	CurrentSleepMode       int     // 0 = Awake, 1 = TempSleep, 2 = TrueSleep
 
@@ -49,6 +51,13 @@ type DefaultRuleEngine struct {
 	LastReflection       time.Time
 	LastIntrospection    time.Time
 	LastProactiveMessage time.Time
+
+	// Previous Biological State for Spikes
+	prevEnergy          float64
+	prevSE              float64
+	prevOX              float64
+	prevCO              float64
+	biologicalStateInit bool
 
 	compiledModifiers []CompiledModifier
 	compiledRules     []CompiledRule
@@ -66,12 +75,12 @@ type CompiledRule struct {
 	Priority  int
 }
 
-// NewRuleEngine initializes a new engine with resting defaults.
 func NewRuleEngine() RuleEngine {
 	now := time.Now()
 	engine := &DefaultRuleEngine{
 		Heartrate:              70.0,
-		MentalEnergy:           100.0,
+		MentalEnergy:           800.0,
+		CurrentDrainRate:       10.0,
 		MovingAverageUserDelay: 10 * time.Second, // Default starting assumption
 		CurrentSleepMode:       2,                // Default to Hibernation (True Sleep) on startup
 		LastUserMessage:        now,
@@ -86,7 +95,15 @@ func NewRuleEngine() RuleEngine {
 }
 
 func (e *DefaultRuleEngine) GetHeartrate() float64 {
-	return e.Heartrate
+	// Dynamically calculate HR based on the current drain rate
+	hr := 60.0 + (e.CurrentDrainRate * 2.5) // Example mapping: drain of 10 = 85 BPM, 40 = 160 BPM
+	if hr > 180 { return 180 }
+	if hr < 40 { return 40 }
+	return hr
+}
+
+func (e *DefaultRuleEngine) GetEnergyDrainRate() float64 {
+	return e.CurrentDrainRate
 }
 
 func (e *DefaultRuleEngine) GetMentalEnergy() float64 {
@@ -114,12 +131,9 @@ func (e *DefaultRuleEngine) ConsumeEnergy(amount float64) {
 }
 
 // OnResponse is called each time Lyra sends a reply.
-// It drains mental energy by 10 and slightly drops the heartrate.
+// It drains mental energy dynamically based on the current mind state.
 func (e *DefaultRuleEngine) OnResponse() {
-	e.ConsumeEnergy(10.0)
-	// Each response costs a little HR too (cognitive effort)
-	e.Heartrate -= 2.0
-	if e.Heartrate < 40.0 {
-		e.Heartrate = 40.0
-	}
+	// The actual dynamic drain calculation happens in UpdateHeartrate/EvaluateState now,
+	// but we apply the current drain rate per response.
+	e.ConsumeEnergy(e.CurrentDrainRate)
 }

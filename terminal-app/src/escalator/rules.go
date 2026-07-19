@@ -36,9 +36,10 @@ type Env struct {
 	EnergyFactor float64
 
 	ModelAttention  float64
-	NegativeEmotion float64
-	PositiveEmotion float64
 	UserAttention   float64
+	Serotonin       float64
+	Oxytocin        float64
+	Cortisol        float64
 
 	IdleDurationSecs float64
 	IdleDurationMins float64
@@ -125,25 +126,28 @@ func (e *DefaultRuleEngine) UpdateHeartrate(mindState string) {
 		e.Heartrate = 180.0
 	}
 
-	// Mental Energy regen: if HR is at or near resting, recover energy per tick.
-	restingThreshold := 72.0
-	if val := os.Getenv("SYSTEM_RECOVERY_HR_THRESHOLD"); val != "" {
-		if v, err := strconv.ParseFloat(val, 64); err == nil {
-			restingThreshold = v
-		}
+	// Dynamic Drain Rate based on chemistry
+	// Base drain = 10, plus up to +10 for extreme stress, +10 for extreme fear
+	baseDrain := 10.0
+	stressDrain := 0.0
+	if env.Cortisol > 0 {
+		stressDrain = env.Cortisol * 10.0
 	}
-	recoveryRate := 10.0
-	if val := os.Getenv("SYSTEM_ENERGY_RECOVERY_RATE"); val != "" {
-		if v, err := strconv.ParseFloat(val, 64); err == nil {
-			recoveryRate = v
-		}
+	fearDrain := 0.0
+	if env.Oxytocin < 0 { // negative OX is fear
+		fearDrain = (env.Oxytocin * -1.0) * 10.0
+	}
+	e.CurrentDrainRate = baseDrain + stressDrain + fearDrain
+
+	// Energy Recharge Logic
+	if e.CurrentSleepMode > 0 { // Hibernation or Sleep
+		e.MentalEnergy += 25.0
+	} else if env.Cortisol < 0.2 && env.Oxytocin >= 0.1 { // Awake but Calm
+		e.MentalEnergy += 15.0
 	}
 
-	if e.Heartrate <= restingThreshold {
-		e.MentalEnergy += recoveryRate
-		if e.MentalEnergy > 100.0 {
-			e.MentalEnergy = 100.0
-		}
+	if e.MentalEnergy > 1000.0 {
+		e.MentalEnergy = 1000.0
 	}
 }
 
@@ -177,16 +181,17 @@ func (e *DefaultRuleEngine) OnUserMessage(mindState string) {
 }
 
 func (e *DefaultRuleEngine) buildEnv(mindState string, hasUnconsolidatedMessages bool) Env {
-	var ma, ne, pe, ua float64
+	var ma, ua, se, ox, co float64
 	parts := strings.Split(mindState, ":")
-	if len(parts) >= 4 {
+	if len(parts) >= 5 {
 		ma, _ = strconv.ParseFloat(parts[0], 64)
-		ne, _ = strconv.ParseFloat(parts[1], 64)
-		pe, _ = strconv.ParseFloat(parts[2], 64)
-		ua, _ = strconv.ParseFloat(parts[3], 64)
+		ua, _ = strconv.ParseFloat(parts[1], 64)
+		se, _ = strconv.ParseFloat(parts[2], 64)
+		ox, _ = strconv.ParseFloat(parts[3], 64)
+		co, _ = strconv.ParseFloat(parts[4], 64)
 	}
 
-	energyFactor := e.MentalEnergy / 100.0
+	energyFactor := e.MentalEnergy / 1000.0
 	if energyFactor < 0.1 {
 		energyFactor = 0.1
 	}
@@ -228,9 +233,10 @@ func (e *DefaultRuleEngine) buildEnv(mindState string, hasUnconsolidatedMessages
 		EnergyFactor: energyFactor,
 
 		ModelAttention:  ma,
-		NegativeEmotion: ne,
-		PositiveEmotion: pe,
 		UserAttention:   ua,
+		Serotonin:       se,
+		Oxytocin:        ox,
+		Cortisol:        co,
 
 		IdleDurationSecs: idleDuration.Seconds(),
 		IdleDurationMins: idleDuration.Minutes(),
@@ -303,4 +309,57 @@ func (e *DefaultRuleEngine) AcknowledgeEvent(evt EventType) {
 		e.LastIntrospection = now
 		e.ConsumeEnergy(20.0)
 	}
+}
+
+func (e *DefaultRuleEngine) CheckBiologicalEvents(newMindState string) string {
+	var se, ox, co float64
+	parts := strings.Split(newMindState, ":")
+	if len(parts) >= 5 {
+		se, _ = strconv.ParseFloat(parts[2], 64)
+		ox, _ = strconv.ParseFloat(parts[3], 64)
+		co, _ = strconv.ParseFloat(parts[4], 64)
+	}
+
+	if !e.biologicalStateInit {
+		e.prevEnergy = e.MentalEnergy
+		e.prevSE = se
+		e.prevOX = ox
+		e.prevCO = co
+		e.biologicalStateInit = true
+		return ""
+	}
+
+	var msgs []string
+
+	// Energy thresholds
+	if e.prevEnergy >= 200.0 && e.MentalEnergy < 200.0 {
+		msgs = append(msgs, "[System: Your energy levels have crashed critically low. You feel a wave of profound lethargy and listlessness.]")
+	} else if e.prevEnergy < 500.0 && e.MentalEnergy >= 500.0 {
+		msgs = append(msgs, "[System: You feel well-rested and fully recharged.]")
+	}
+
+	// Hormone spikes
+	if e.prevOX >= -0.6 && ox < -0.6 {
+		msgs = append(msgs, "[System: Biological Spike: Sudden drop in oxytocin. You feel a sharp wave of fear, defensiveness, or paranoia.]")
+	}
+	if e.prevCO <= 0.7 && co > 0.7 {
+		msgs = append(msgs, "[System: Biological Spike: Sudden surge of cortisol. You feel an intense wave of stress and being overwhelmed.]")
+	}
+	if e.prevSE <= 0.7 && se > 0.7 {
+		msgs = append(msgs, "[System: Biological Spike: Surge of serotonin. You feel deeply validated, warm, and happy.]")
+	}
+	if e.prevSE >= -0.6 && se < -0.6 {
+		msgs = append(msgs, "[System: Biological Spike: Drop in serotonin. You feel a wave of sadness or melancholy.]")
+	}
+
+	// Update prev state
+	e.prevEnergy = e.MentalEnergy
+	e.prevSE = se
+	e.prevOX = ox
+	e.prevCO = co
+
+	if len(msgs) > 0 {
+		return strings.Join(msgs, "\n")
+	}
+	return ""
 }

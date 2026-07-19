@@ -32,7 +32,7 @@ If you want to create a brand new bot with a custom personality, you compile it 
 ## Commands
 While chatting with your Persona, you can use these special commands:
 *   `>>debug`: Bypasses the LLM and prints system status (e.g., current mindstate and active episodes).
-*   `>>mindstate <ma>:<ne>:<pe>:<ua>`: Manually override the current mindstate.
+*   `>>mindstate <ma>:<ua>:<se>:<ox>:<co>`: Manually override the current mindstate.
 *   `>>consolidate`: Triggers the Summariser agent to chunk unsaved history into episodic memories.
 *   `>>reflect`: Dynamically loads past conversational facts and behavioral strategies into active memory using semantic vector search.
 *   `>>introspect`: Offline analysis of recent high-emotion conversations to generate alternative response strategies and behavioral facts.
@@ -144,10 +144,10 @@ Every single message (user inputs, assistant replies, mindstate scores) is saved
 
 The framework features a **Reactor Agent** packaged in `reactor/` that monitors conversation flow in the background:
 *   **Triggers:** Automatically executes after every short-term memory update (after the user texts, and after the Persona responds).
-*   **Function:** Evaluates the conversation to generate a `mindstate` score:
-    `[Model Attention] : [Negative Emotion] : [Positive Emotion] : [User Attention]`
-*   **Impact:** Updates the active mindstate in real-time, allowing the Persona to adjust tone, detail length, and emotional matching dynamically in its response.
-*   **Low-Attention Skipping:** If the Model Attention drops below `0.20`, the Persona has a 33% chance to skip generating a response, simulating natural conversational disengagement.
+*   **Function:** Evaluates the conversation to generate a 5-dimensional `mindstate` score (with values spanning -1.0 to 1.0):
+    `[Model Attention] : [User Attention] : [Serotonin] : [Oxytocin] : [Cortisol]`
+*   **Impact:** Updates the active mindstate in real-time. Hormones dictate mood, trust, and stress. These biological states also directly throttle the agent's energy drain rate (e.g., high Cortisol causes exhaustion).
+*   **Exhaustion / Ignoring:** If Model Attention drops below `0.0` and Mental Energy drops below `400/1000`, the Persona will explicitly ignore the user, simulating exhaustion and disengagement.
 
 ---
 
@@ -206,11 +206,10 @@ The **Escalator Module** turns the Persona into a proactive participant. Driven 
 
 *   **Customizable Rules (`default_ruleengine.yaml`)**: The Rule Engine uses `expr` to evaluate rules dynamically. It is embedded into the binary at build time. You can modify this YAML file before building to define exact logic for heart rate spikes and background events.
 *   **Properties & Variables**: The Rule Engine evaluates rules against a live `Env` struct containing:
-    *   `Heartrate` (float): Tracks cognitive load and excitement. Natural resting rate is 70 BPM. Spikes during high-attention or emotional exchanges.
-    *   `MentalEnergy` (float): Ranges from 0–100. Doing heavy tasks (responding, reflecting) costs energy. It naturally regenerates during idle time when the Heartrate returns to resting levels.
-    *   `EnergyFactor` (float): `MentalEnergy / 100`, used to scale heartrate spikes (a tired bot gets less excited).
+    *   `Heartrate` (float): A derived diagnostic metric reflecting cognitive load and the current speed of energy consumption.
+    *   `MentalEnergy` (float): Ranges from 0–1000. Doing tasks costs energy, but emotional spikes (high Cortisol, low Oxytocin) dramatically accelerate the drain rate. It naturally regenerates during idle time or hibernation sleep cycles.
     *   `IdleDurationMins` & `IdleDurationSecs`: Time since the user last sent a message.
-    *   `ModelAttention`, `UserAttention`, `PositiveEmotion`, `NegativeEmotion`: The latest mindstate values parsed directly from the Reactor module.
+    *   `ModelAttention`, `UserAttention`, `Serotonin`, `Oxytocin`, `Cortisol`: The latest biological mindstate values parsed directly from the Reactor module.
 *   **Background Scheduler**: A concurrent ticker evaluates the state against the Rule Engine and emits events (e.g., `PROACTIVE_MESSAGE`, `REFLECT`, `CONSOLIDATE`, `INTROSPECT`).
 *   **Environment Modifiers**: The engine respects variables that tweak background rules:
     *   `SYSTEM_CONSOLIDATION_FREQ_MINS` (default: 1): How often unstored messages are grouped into an episode.

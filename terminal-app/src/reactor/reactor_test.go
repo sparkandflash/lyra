@@ -57,8 +57,8 @@ func TestMockReactorEscalation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.PositiveEmotion <= 0.5 {
-		t.Errorf("expected positive emotion to increase, got %.2f", resp.PositiveEmotion)
+	if resp.Serotonin <= 0.5 {
+		t.Errorf("expected serotonin to increase, got %.2f", resp.Serotonin)
 	}
 
 	// 2. Test negative input
@@ -70,8 +70,8 @@ func TestMockReactorEscalation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.NegativeEmotion <= 0.3 {
-		t.Errorf("expected negative emotion to increase, got %.2f", resp.NegativeEmotion)
+	if resp.Cortisol <= 0.3 {
+		t.Errorf("expected cortisol to increase, got %.2f", resp.Cortisol)
 	}
 
 	// 3. Test stable/default input
@@ -82,7 +82,7 @@ func TestMockReactorEscalation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if resp.NegativeEmotion > 0.4 || resp.PositiveEmotion > 0.6 {
+	if resp.Cortisol > 0.4 || resp.Serotonin > 0.4 {
 		t.Errorf("expected emotions to stay near default baseline, got %+v", resp)
 	}
 }
