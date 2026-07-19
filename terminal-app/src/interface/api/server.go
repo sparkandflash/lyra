@@ -65,8 +65,8 @@ func StartServer(inputChan chan<- ChatInput, historyMgr *consolidator.HistoryMan
 
 func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set standard CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "https://lyra.chalkboard.cc")
+		origin := getEnv("CORS_ORIGIN", "*")
+		w.Header().Set("Access-Control-Allow-Origin", origin)
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
 		w.Header().Set("Access-Control-Allow-Headers", "Accept, Content-Type, Content-Length, Accept-Encoding, X-CSRF-Token, Authorization")
 
@@ -229,7 +229,7 @@ func (s *Server) handleSendMessage(w http.ResponseWriter, r *http.Request) {
 	case reply := <-respChan:
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"reply": reply})
-	case <-time.After(15 * time.Second):
+	case <-time.After(90 * time.Second):
 		http.Error(w, "Request timed out", http.StatusGatewayTimeout)
 	}
 }

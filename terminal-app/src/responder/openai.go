@@ -77,12 +77,15 @@ func (r *OpenAIResponder) respondInternal(ctx context.Context, prompt string, mi
 	energyLabel := ""
 	if idx := strings.Index(mindState, "|energy:"); idx != -1 {
 		actualMindState = mindState[:idx]
-		energyLabel = mindState[idx+8:] // everything after "|energy:"
+		energyLabel = mindState[idx+8:] // start after "|energy:"
+		if sepIdx := strings.Index(energyLabel, "|"); sepIdx != -1 {
+			energyLabel = energyLabel[:sepIdx]
+		}
 	}
 
 	promptBuilder.WriteString(fmt.Sprintf("[Current Mindstate: %s]\n", actualMindState))
 	if energyLabel != "" {
-		promptBuilder.WriteString(fmt.Sprintf("[Mental Energy: %s/100]\n", energyLabel))
+		promptBuilder.WriteString(fmt.Sprintf("[Mental Energy: %s/1000]\n", energyLabel))
 	}
 	
 	if len(episodes) > 0 {

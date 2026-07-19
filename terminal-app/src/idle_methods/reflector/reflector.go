@@ -50,12 +50,43 @@ func Reflect(currentMindState string, activeEpisodes []responder.EpisodeSummary)
 	}
 
 	var facts []episode_memory.EpisodeSummary
+	seenIDs := make(map[string]bool)
+
 	for _, doc := range res {
+		if seenIDs[doc.ID] {
+			continue
+		}
+		seenIDs[doc.ID] = true
+
 		facts = append(facts, episode_memory.EpisodeSummary{
 			ID:            doc.ID,
 			Facts:         []string{doc.Content},
 			PeakMindState: currentMindState, // Or extract from metadata
 		})
+
+		// Traverse links (1 degree)
+		linkedTo := doc.Metadata["linked_to"]
+		if linkedTo != "" {
+			var linkedFacts []string
+			// chromem-go doesn't have an empty query fetch, so iteratively GetByID until failure
+			for i := 0; i < 20; i++ {
+				factID := fmt.Sprintf("%s_fact_%d", linkedTo, i)
+				ldoc, err := collection.GetByID(context.Background(), factID)
+				if err != nil {
+					break
+				}
+				linkedFacts = append(linkedFacts, ldoc.Content)
+				seenIDs[factID] = true
+			}
+			
+			if len(linkedFacts) > 0 {
+				facts = append(facts, episode_memory.EpisodeSummary{
+					ID:            linkedTo,
+					Facts:         linkedFacts,
+					PeakMindState: currentMindState, 
+				})
+			}
+		}
 	}
 
 	return facts, nil
@@ -65,7 +96,7 @@ func Reflect(currentMindState string, activeEpisodes []responder.EpisodeSummary)
 // formatted as "MA:NE:PE:UA" and returns their sum.
 func parseAttentionScore(mindState string) (float64, error) {
 	parts := strings.Split(mindState, ":")
-	if len(parts) != 4 {
+	if len(parts) != 5 {
 		return 0, fmt.Errorf("invalid mindstate format")
 	}
 
@@ -73,7 +104,7 @@ func parseAttentionScore(mindState string) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	ua, err := strconv.ParseFloat(parts[3], 64)
+	ua, err := strconv.ParseFloat(parts[1], 64)
 	if err != nil {
 		return 0, err
 	}

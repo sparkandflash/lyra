@@ -11,11 +11,11 @@ func TestPushAndEviction(t *testing.T) {
 	// Budget of 250: ep1+ep2 fit (217 < 250).
 	// After pushing ep3: 217+171=388 > 250, ep1 is evicted first (109+171=280 still > 250),
 	// then ep2 is evicted (171 <= 250). Only ep3 remains.
-	mgr := NewEpisodeMemoryManager(150)
+	mgr := NewEpisodeMemoryManager(170)
 
-	ep1 := EpisodeSummary{ID: "ep1", Facts: []string{"first episode"}, PeakMindState: "0.9:0.3:0.5:0.7"}
-	ep2 := EpisodeSummary{ID: "ep2", Facts: []string{"second episode"}, PeakMindState: "0.9:0.3:0.5:0.7"}
-	ep3 := EpisodeSummary{ID: "ep3", Facts: []string{"third episode with more content to push over limit"}, PeakMindState: "0.9:0.3:0.5:0.7"}
+	ep1 := EpisodeSummary{ID: "ep1", Facts: []string{"first episode"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
+	ep2 := EpisodeSummary{ID: "ep2", Facts: []string{"second episode"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
+	ep3 := EpisodeSummary{ID: "ep3", Facts: []string{"third episode with more content to push over limit"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
 
 	mgr.Push(ep1)
 	mgr.Push(ep2)
@@ -42,11 +42,11 @@ func TestPushAndEviction(t *testing.T) {
 func TestPinPreventsEviction(t *testing.T) {
 	// ep1(108)+ep2(109)=217 < 300, both fit. With ep1 pinned and ep3(171) added:
 	// Total 388 > 300 → evict oldest non-pinned = ep2. ep1+ep3=279 < 300, done.
-	mgr := NewEpisodeMemoryManager(160)
+	mgr := NewEpisodeMemoryManager(180)
 
-	ep1 := EpisodeSummary{ID: "ep1", Facts: []string{"first episode"}, PeakMindState: "0.9:0.3:0.5:0.7"}
-	ep2 := EpisodeSummary{ID: "ep2", Facts: []string{"second episode"}, PeakMindState: "0.9:0.3:0.5:0.7"}
-	ep3 := EpisodeSummary{ID: "ep3", Facts: []string{"third episode with more content to push over limit"}, PeakMindState: "0.9:0.3:0.5:0.7"}
+	ep1 := EpisodeSummary{ID: "ep1", Facts: []string{"first episode"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
+	ep2 := EpisodeSummary{ID: "ep2", Facts: []string{"second episode"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
+	ep3 := EpisodeSummary{ID: "ep3", Facts: []string{"third episode with more content to push over limit"}, PeakMindState: "0.9:0.3:0.5:0.7:0.5"}
 
 	mgr.Push(ep1)
 	mgr.MarkUseful("ep1") // pin ep1
@@ -81,7 +81,7 @@ func TestLoadFromDisk(t *testing.T) {
 	content := `{
 		"id": "test_ep_1",
 		"facts": ["test summary"],
-		"peak_mindstate": "0.9:0.3:0.5:0.7"
+		"peak_mindstate": "0.9:0.3:0.5:0.7:0.5"
 	}`
 	if err := os.WriteFile(epFile, []byte(content), 0644); err != nil {
 		t.Fatalf("failed to write test episode file: %v", err)

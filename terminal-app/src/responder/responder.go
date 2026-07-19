@@ -71,7 +71,6 @@ type Config struct {
 }
 
 func loadAgentConfig(prefix string, defaultPrompt string) Config {
-	loadEnvFile()
 
 	getType := func() string {
 		if val := os.Getenv("SYSTEM_" + prefix + "_TYPE"); val != "" {
@@ -211,7 +210,6 @@ func loadEnvFile() {
 
 // NewResponderFromEnv initializes a responder based on the environment config.
 func NewResponderFromEnv() (Responder, error) {
-	loadEnvFile()
 	config := LoadConfigFromEnv()
 	if config.SystemInstruction == "" {
 		config.SystemInstruction = prompts.GetResponderPrompt()

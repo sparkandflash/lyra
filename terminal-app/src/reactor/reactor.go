@@ -74,7 +74,7 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 				return -1.0
 			}
 			sub := rawResponse[idx+len(key):]
-			re := regexp.MustCompile(`[0-9]+\.[0-9]+`)
+			re := regexp.MustCompile(`[-]?[0-9]+\.[0-9]+`)
 			match := re.FindString(sub)
 			if match == "" {
 				return -1.0

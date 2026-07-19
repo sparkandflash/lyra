@@ -34,8 +34,8 @@ func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.Epis
 		msg := messages[i]
 		if msg.MindState != "" {
 			parts := strings.Split(msg.MindState, ":")
-			if len(parts) >= 4 {
-				ne, err := strconv.ParseFloat(parts[1], 64)
+			if len(parts) >= 5 {
+				ne, err := strconv.ParseFloat(parts[4], 64) // Cortisol
 				if err == nil && ne > 0.6 {
 					targetIdx = i
 					break
@@ -95,7 +95,7 @@ func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.Epis
 	summariserAgent := summariser.NewSummariserAgent()
 
 	sysPrompt := prompts.GetIntrospectionPrompt()
-	respStr, err := summariserAgent.Summarise(context.Background(), sysPrompt+"\n\nTranscript:\n"+transcript)
+	respStr, err := summariserAgent.SummariseWithPrompt(context.Background(), transcript, sysPrompt)
 	if err != nil {
 		return fmt.Errorf("failed to call summariser for introspection: %w", err)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"terminal-app/src/utils"
@@ -21,6 +22,7 @@ type Message struct {
 
 // STMmanager manages the rolling short term memory of the chat.
 type STMmanager struct {
+	mu       sync.RWMutex
 	maxChars int
 	messages []Message
 }
@@ -35,12 +37,18 @@ func NewSTMmanager(maxChars int) *STMmanager {
 
 // Get returns all messages currently stored in short term memory.
 func (m *STMmanager) Get() []Message {
-	return m.messages
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cp := make([]Message, len(m.messages))
+	copy(cp, m.messages)
+	return cp
 }
 
 // GetNoFlags returns all messages in STM with only ID, Author, and Content populated.
 // MindState and Stored flags are omitted — this is the clean view sent to the responder LLM.
 func (m *STMmanager) GetNoFlags() []Message {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	clean := make([]Message, len(m.messages))
 	for i, msg := range m.messages {
 		clean[i] = Message{ID: msg.ID, Author: msg.Author, Content: msg.Content}
@@ -51,6 +59,10 @@ func (m *STMmanager) GetNoFlags() []Message {
 // Update appends a message and discards older ones (FIFO) until the total character length is within the maxChars limit.
 func (m *STMmanager) Update(role string, content string) {
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
 	m.messages = append(m.messages, Message{ID: msgID, Author: role, Content: content})
 
 	// FIFO pruning based on the character length of the contents
@@ -61,6 +73,7 @@ func (m *STMmanager) Update(role string, content string) {
 
 // totalChars calculates the sum of characters of all messages in short term memory.
 func (m *STMmanager) totalChars() int {
+	// Callers must hold lock
 	sum := 0
 	for _, msg := range m.messages {
 		sum += len(msg.Content)
@@ -70,6 +83,7 @@ func (m *STMmanager) totalChars() int {
 
 // HistoryManager manages the persistent log of the full conversation.
 type HistoryManager struct {
+	mu        sync.RWMutex
 	SessionID string
 	filePath  string
 	messages  []Message
@@ -119,6 +133,10 @@ func NewHistoryManager(sessionID string) (*HistoryManager, error) {
 // Save appends a new message to the persistent history and writes the full log to disk.
 func (h *HistoryManager) Save(role string, content string, mindState string) error {
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
+	
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	h.messages = append(h.messages, Message{ID: msgID, Author: role, Content: content, MindState: mindState, Stored: false})
 
 	data, err := json.MarshalIndent(h.messages, "", "  ")
@@ -135,11 +153,18 @@ func (h *HistoryManager) Save(role string, content string, mindState string) err
 
 // GetMessages returns a copy of all messages currently stored in the history manager.
 func (h *HistoryManager) GetMessages() []Message {
-	return h.messages
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	cp := make([]Message, len(h.messages))
+	copy(cp, h.messages)
+	return cp
 }
 
 // MarkStored flags messages in the range [start, end) as stored and writes the updated array back to disk.
 func (h *HistoryManager) MarkStored(start, end int) error {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
 	if start < 0 || end > len(h.messages) || start > end {
 		return fmt.Errorf("invalid range: [%d, %d)", start, end)
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 )
 
 // EpisodeSummary is a lightweight view of an episode — no raw messages, just metadata.
@@ -28,6 +29,7 @@ type episodeOnDisk struct {
 // EpisodeMemoryManager is a runtime-only in-memory pool of episode summaries.
 // Episode JSON files are never modified by this manager.
 type EpisodeMemoryManager struct {
+	mu              sync.RWMutex
 	active          []EpisodeSummary
 	maxChars        int
 	pinnedEpisodeID string
@@ -58,6 +60,8 @@ func LoadEpisodeMemoryManagerFromEnv() *EpisodeMemoryManager {
 // If the pool exceeds maxChars after adding, the oldest non-pinned episode is evicted.
 // Episode JSON files are never touched.
 func (m *EpisodeMemoryManager) Push(ep EpisodeSummary) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.active = append(m.active, ep)
 
 	// Evict oldest non-pinned episodes until within budget
@@ -101,21 +105,30 @@ func (m *EpisodeMemoryManager) LoadFromDisk(episodePath string) error {
 // MarkUseful pins an episode by ID so it is not evicted by Push.
 // Pass an empty string to clear the pin.
 func (m *EpisodeMemoryManager) MarkUseful(episodeID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.pinnedEpisodeID = strings.TrimSpace(episodeID)
 }
 
 // GetActive returns the current slice of active episode summaries.
 func (m *EpisodeMemoryManager) GetActive() []EpisodeSummary {
-	return m.active
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	cp := make([]EpisodeSummary, len(m.active))
+	copy(cp, m.active)
+	return cp
 }
 
 // GetPinnedID returns the currently pinned episode ID (empty if none).
 func (m *EpisodeMemoryManager) GetPinnedID() string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
 	return m.pinnedEpisodeID
 }
 
 // totalChars calculates the total character count of all serialized active episodes.
 func (m *EpisodeMemoryManager) totalChars() int {
+	// Not acquiring lock here because caller (Push) already holds it.
 	total := 0
 	for _, ep := range m.active {
 		b, err := json.Marshal(ep)

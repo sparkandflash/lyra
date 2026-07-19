@@ -17,10 +17,17 @@ import (
 	"github.com/philippgille/chromem-go"
 )
 
+type Link struct {
+	FactIndex       int    `json:"fact_index"`
+	LinkedEpisodeID string `json:"linked_episode_id"`
+	Reason          string `json:"reason"`
+}
+
 // LLMResponse matches the structured JSON expected from the Summariser LLM.
 type LLMResponse struct {
 	MetricHistory []map[string]string `json:"metric_history"`
 	FactArray     []string            `json:"factArray"`
+	Links         []Link              `json:"links"`
 }
 
 // EpisodeSummary is a lightweight view returned after consolidation.
@@ -35,7 +42,7 @@ type EpisodeSummary struct {
 // Consolidate reads unsaved messages from history, groups them by character length,
 // calls the summariser agent to generate metadata, saves them to episode JSON/CSV files,
 // and returns the newly created episode summaries for the runtime memory manager.
-func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
+func Consolidate(hm *consolidator.HistoryManager, activeEps []EpisodeSummary) ([]EpisodeSummary, error) {
 	messages := hm.GetMessages()
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("no conversation history to consolidate")
@@ -103,8 +110,16 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 		var chunkMsgIDs []string
 		var convBuilder strings.Builder
 
+		if len(activeEps) > 0 {
+			convBuilder.WriteString("--- ACTIVE EPISODES (For Context Linking) ---\n")
+			for _, ep := range activeEps {
+				convBuilder.WriteString(fmt.Sprintf("EpisodeID: %s\nFacts: %s\n\n", ep.ID, strings.Join(ep.Facts, " | ")))
+			}
+			convBuilder.WriteString("--- CONVERSATION TO SUMMARIZE ---\n")
+		}
+
 		// Determine peak mindstate in the chunk based on (Negative + Positive Emotion) activation
-		peakMindState := "0.90:0.30:0.50:0.70"
+		peakMindState := "0.90:0.30:0.50:0.70:0.50"
 		maxActivation := -1.0
 
 		for _, idx := range indices {
@@ -155,6 +170,18 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 		var docs []chromem.Document
 		for i, factStr := range llmResp.FactArray {
 			factID := fmt.Sprintf("%s_fact_%d", episodeID, i)
+			
+			// Extract link for this fact (if any)
+			linkedTo := ""
+			linkReason := ""
+			for _, link := range llmResp.Links {
+				if link.FactIndex == i {
+					linkedTo = link.LinkedEpisodeID
+					linkReason = link.Reason
+					break
+				}
+			}
+
 			docs = append(docs, chromem.Document{
 				ID:      factID,
 				Content: factStr,
@@ -162,6 +189,8 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 					"episode_id":    episodeID,
 					"timestamp":     timestampStr,
 					"metric_deltas": string(deltasStr),
+					"linked_to":     linkedTo,
+					"link_reason":   linkReason,
 				},
 			})
 		}
@@ -196,11 +225,19 @@ func calculateActivationScore(mindState string) float64 {
 	if mindState == "" {
 		return 0.0
 	}
-	var ma, ne, pe, ua float64
-	n, err := fmt.Sscanf(mindState, "%f:%f:%f:%f", &ma, &ne, &pe, &ua)
-	if err != nil || n < 4 {
+	var ma, ua, se, ox, co float64
+	n, err := fmt.Sscanf(mindState, "%f:%f:%f:%f:%f", &ma, &ua, &se, &ox, &co)
+	if err != nil || n < 5 {
 		return 0.0
 	}
-	return ne + pe
+	
+	abs := func(v float64) float64 {
+		if v < 0 {
+			return -v
+		}
+		return v
+	}
+	
+	return abs(se) + abs(ox) + abs(co)
 }
 
