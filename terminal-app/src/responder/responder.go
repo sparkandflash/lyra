@@ -18,9 +18,8 @@ import (
 // EpisodeSummary is a lightweight episode view passed to the responder LLM as episodic context.
 type EpisodeSummary struct {
 	ID            string   `json:"id"`
-	Summary       string   `json:"summary"`
+	Facts         []string `json:"facts"`
 	PeakMindState string   `json:"peak_mindstate"`
-	Conclusion    string   `json:"conclusion"`
 }
 
 // Responder defines the interface for generating responses from LLMs.

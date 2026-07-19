@@ -54,14 +54,14 @@ rules:
     priority: 4
 
   - name: "ProactiveMessage"
-    # HR is high, model is paying attention, user idle for 30s, and sufficient energy. Cooldown: 1 min
-    condition: "CurrentSleepMode == 0 && Heartrate > 90.0 && ModelAttention > 0.7 && IdleDurationSecs >= 30 && MentalEnergy >= 15.0 && TimeSinceProactiveMins >= 1.0"
+    # HR is high, model is paying attention, user idle for 60s, and sufficient energy. Cooldown: 1 min
+    condition: "CurrentSleepMode == 0 && Heartrate > 90.0 && ModelAttention > 0.7 && IdleDurationSecs >= 60 && MentalEnergy >= 15.0 && TimeSinceProactiveMins >= 1.0"
     action: "PROACTIVE_MESSAGE"
     priority: 3
 
   - name: "Reflect"
-    # High engagement (HR > 100 or MA > 0.8), user idle for 15s. Cooldown: 2 mins
-    condition: "CurrentSleepMode == 0 && MentalEnergy >= 15.0 && (Heartrate > 100.0 || ModelAttention > 0.8) && IdleDurationSecs >= 15 && TimeSinceReflectionMins >= 2.0"
+    # High engagement (HR > 100 or MA > 0.8), user idle for 45s. Cooldown: 2 mins
+    condition: "CurrentSleepMode == 0 && MentalEnergy >= 15.0 && (Heartrate > 100.0 || ModelAttention > 0.8) && IdleDurationSecs >= 45 && TimeSinceReflectionMins >= 2.0"
     action: "REFLECT"
     priority: 2
 

@@ -82,11 +82,12 @@ func (s *SummariserAgent) summariseMock(conversationText string) (string, error)
 		}
 	}
 
-	// Mock structured response
+	// Mock structured response matching consolidation.LLMResponse
 	mockData := map[string]interface{}{
-		"summary":    "A casual dialog checking back and forth on various user topics.",
-		"keywords":   uniqueKeywords,
-		"conclusion": "The conversation maintained a balanced tone without major emotional conflicts.",
+		"metric_history": []map[string]string{
+			{"user_attention": "+1"},
+		},
+		"factArray": uniqueKeywords,
 	}
 
 	bytes, err := json.Marshal(mockData)

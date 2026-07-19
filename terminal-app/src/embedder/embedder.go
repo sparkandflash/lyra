@@ -93,7 +93,27 @@ func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {
 		return nil, fmt.Errorf("empty embedding returned")
 	}
 
-	return result.Embeddings[0], nil
+	vec := result.Embeddings[0]
+	// Normalize the vector for chromem-go
+	var norm float32
+	for _, v := range vec {
+		norm += v * v
+	}
+	norm = float32(math.Sqrt(float64(norm)))
+	if norm > 0 {
+		for i := range vec {
+			vec[i] /= norm
+		}
+	}
+
+	return vec, nil
+}
+
+// AsChromemEmbeddingFunc returns a chromem.EmbeddingFunc for use with chromem-go.
+func (e *Embedder) AsChromemEmbeddingFunc() func(ctx context.Context, text string) ([]float32, error) {
+	return func(ctx context.Context, text string) ([]float32, error) {
+		return e.Embed(ctx, text)
+	}
 }
 
 // CosineSimilarity calculates the semantic similarity between two embedding vectors.

@@ -88,7 +88,7 @@ func (r *OpenAIResponder) respondInternal(ctx context.Context, prompt string, mi
 	if len(episodes) > 0 {
 		promptBuilder.WriteString("\n[Recalled Episodic Memories]\n")
 		for _, ep := range episodes {
-			promptBuilder.WriteString(fmt.Sprintf("- Episode %s: %s\n", ep.ID, ep.Summary))
+			promptBuilder.WriteString(fmt.Sprintf("- Episode %s: %s\n", ep.ID, strings.Join(ep.Facts, " ")))
 		}
 	}
 

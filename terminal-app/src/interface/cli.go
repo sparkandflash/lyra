@@ -340,9 +340,8 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 					for _, ep := range newEpisodes {
 						episodeMgr.Push(episode_memory.EpisodeSummary{
 							ID:            ep.ID,
-							Summary:       ep.Summary,
+							Facts:         ep.Facts,
 							PeakMindState: ep.PeakMindState,
-							Conclusion:    ep.Conclusion,
 						})
 					}
 					hasUnconsolidated = false
@@ -381,13 +380,13 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 				activeEps := episodeMgr.GetActive()
 				episodes := make([]responder.EpisodeSummary, len(activeEps))
 				for i, ep := range activeEps {
-					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Summary: ep.Summary, PeakMindState: ep.PeakMindState, Conclusion: ep.Conclusion}
+					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Facts: ep.Facts, PeakMindState: ep.PeakMindState}
 				}
-				matchedIDs, _ := reflector.Reflect(mindState, episodes)
-				for _, id := range matchedIDs {
-					_ = episodeMgr.LoadFromDisk(utils.ResolvePath(filepath.Join("Context", "episodes", id+".json")))
+				matchedFacts, _ := reflector.Reflect(mindState, episodes)
+				for _, fact := range matchedFacts {
+					episodeMgr.Push(fact)
 					if debugMode {
-						fmt.Fprintf(outWriter, "[DEBUG] Reflect (Background): loaded episode %s\n", id)
+						fmt.Fprintf(outWriter, "[DEBUG] Reflect (Background): loaded fact %s\n", fact.ID)
 					}
 				}
 			case escalator.EventIntrospect:
@@ -399,16 +398,13 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 				responderSTM.Update("system", sysMsg)
 				reactorSTM.Update("system", sysMsg)
 
-				activeEps := episodeMgr.GetActive()
-				if len(activeEps) > 0 {
-					_ = reflector.Introspect(activeEps[0].ID)
-				}
+				_ = reflector.Introspect(historyMgr, episodeMgr)
 			case escalator.EventProactiveMessage:
 				ctx := context.Background()
 				activeEps := episodeMgr.GetActive()
 				episodes := make([]responder.EpisodeSummary, len(activeEps))
 				for i, ep := range activeEps {
-					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Summary: ep.Summary, PeakMindState: ep.PeakMindState, Conclusion: ep.Conclusion}
+					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Facts: ep.Facts, PeakMindState: ep.PeakMindState}
 				}
 
 				// Inject the system cue into all active memory contexts
@@ -516,9 +512,8 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 					for _, ep := range newEpisodes {
 						episodeMgr.Push(episode_memory.EpisodeSummary{
 							ID:            ep.ID,
-							Summary:       ep.Summary,
+							Facts:         ep.Facts,
 							PeakMindState: ep.PeakMindState,
-							Conclusion:    ep.Conclusion,
 						})
 					}
 					hasUnconsolidated = false
@@ -529,27 +524,27 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 				activeEps := episodeMgr.GetActive()
 				episodes := make([]responder.EpisodeSummary, len(activeEps))
 				for i, ep := range activeEps {
-					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Summary: ep.Summary, PeakMindState: ep.PeakMindState, Conclusion: ep.Conclusion}
+					episodes[i] = responder.EpisodeSummary{ID: ep.ID, Facts: ep.Facts, PeakMindState: ep.PeakMindState}
 				}
-				matchedIDs, err := reflector.Reflect(mindState, episodes)
+				matchedFacts, err := reflector.Reflect(mindState, episodes)
 				if err != nil {
-					fmt.Fprintf(outWriter, "system: error: reflection failed: %v\n", err)
+					if debugMode {
+						fmt.Fprintf(outWriter, "[DEBUG] Reflect explicitly failed: %v\n", err)
+					}
 				} else {
-					loaded := 0
-					for _, id := range matchedIDs {
-						if err := episodeMgr.LoadFromDisk(utils.ResolvePath(filepath.Join("Context", "episodes", id+".json"))); err == nil {
-							loaded++
+					for _, fact := range matchedFacts {
+						episodeMgr.Push(fact)
+						if debugMode {
+							fmt.Fprintf(outWriter, "[DEBUG] Reflect explicitly loaded fact %s\n", fact.ID)
 						}
 					}
-					fmt.Fprintf(outWriter, "system: reflection completed. Found %d matching episodes, loaded %d into active memory.\n", len(matchedIDs), loaded)
 				}
 				continue
-			} else if strings.HasPrefix(input, ">>introspect ") {
-				episodeID := strings.TrimSpace(strings.TrimPrefix(input, ">>introspect "))
-				if err := reflector.Introspect(episodeID); err != nil {
+			} else if strings.HasPrefix(input, ">>introspect") {
+				if err := reflector.Introspect(historyMgr, episodeMgr); err != nil {
 					fmt.Fprintf(outWriter, "system: error: introspection failed: %v\n", err)
 				} else {
-					fmt.Fprintf(outWriter, "system: introspection completed for %s. Reflection saved.\n", episodeID)
+					fmt.Fprintf(outWriter, "system: introspection completed. Behavioral fact saved.\n")
 				}
 				continue
 			}
@@ -624,7 +619,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 			activeEps := episodeMgr.GetActive()
 			episodes := make([]responder.EpisodeSummary, len(activeEps))
 			for i, ep := range activeEps {
-				episodes[i] = responder.EpisodeSummary{ID: ep.ID, Summary: ep.Summary, PeakMindState: ep.PeakMindState, Conclusion: ep.Conclusion}
+				episodes[i] = responder.EpisodeSummary{ID: ep.ID, Facts: ep.Facts, PeakMindState: ep.PeakMindState}
 			}
 
 			// Respond using responder's clean STM (no stored flags) + active episodes

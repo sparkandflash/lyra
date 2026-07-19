@@ -12,20 +12,16 @@ import (
 // This is what gets sent to the responder LLM and kept in runtime memory.
 type EpisodeSummary struct {
 	ID            string   `json:"id"`
-	Summary       string   `json:"summary"`
-	Keywords      []string `json:"keywords"`
+	Facts         []string `json:"facts"`
 	PeakMindState string   `json:"peak_mindstate"`
-	Conclusion    string   `json:"conclusion"`
 }
 
 // episodeOnDisk mirrors the on-disk JSON structure so we can load full episodes.
 // We only read this; we never write to it.
 type episodeOnDisk struct {
 	ID            string   `json:"id"`
-	Summary       string   `json:"summary"`
-	Keywords      []string `json:"keywords"`
+	Facts         []string `json:"facts"`
 	PeakMindState string   `json:"peak_mindstate"`
-	Conclusion    string   `json:"conclusion"`
 	// Messages field intentionally ignored — not needed in runtime memory
 }
 
@@ -96,10 +92,8 @@ func (m *EpisodeMemoryManager) LoadFromDisk(episodePath string) error {
 
 	m.Push(EpisodeSummary{
 		ID:            ep.ID,
-		Summary:       ep.Summary,
-		Keywords:      ep.Keywords,
+		Facts:         ep.Facts,
 		PeakMindState: ep.PeakMindState,
-		Conclusion:    ep.Conclusion,
 	})
 	return nil
 }

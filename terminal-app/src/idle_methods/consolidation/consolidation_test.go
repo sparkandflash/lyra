@@ -61,30 +61,13 @@ func TestConsolidationFlow(t *testing.T) {
 		t.Error("expected at least one episode summary returned from Consolidate")
 	}
 
-	// 1. Verify JSON Episode File was created
-	episodePath := filepath.Join("Context", "episodes", newEpisodes[0].ID+".json")
-	if _, err := os.Stat(episodePath); os.IsNotExist(err) {
-		t.Fatalf("expected episode file to be created at: %s", episodePath)
+	// 1. Verify EpisodeSummary was returned
+	if len(newEpisodes[0].Facts) == 0 {
+		t.Errorf("expected facts to be extracted")
 	}
-
-	// Read and verify episode fields
-	epData, err := os.ReadFile(episodePath)
-	if err != nil {
-		t.Fatalf("failed to read episode file: %v", err)
-	}
-
-	var ep Episode
-	if err := json.Unmarshal(epData, &ep); err != nil {
-		t.Fatalf("failed to unmarshal episode data: %v", err)
-	}
-
-	if ep.PeakMindState != "0.90:0.80:0.20:0.70" {
-		t.Errorf("expected peak mindstate '0.90:0.80:0.20:0.70', got %q", ep.PeakMindState)
-	}
-	// 2. Verify JSONL Index File was created
-	jsonlPath := filepath.Join("Context", "episodes", "index.jsonl")
-	if _, err := os.Stat(jsonlPath); os.IsNotExist(err) {
-		t.Fatalf("expected index.jsonl to be created")
+	
+	if newEpisodes[0].PeakMindState != "0.90:0.80:0.20:0.70" {
+		t.Errorf("expected peak mindstate '0.90:0.80:0.20:0.70', got %q", newEpisodes[0].PeakMindState)
 	}
 
 	// 3. Verify history JSON file messages are updated with stored:true

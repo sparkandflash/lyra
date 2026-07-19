@@ -2,147 +2,143 @@ package reflector
 
 import (
 	"context"
-	"encoding/csv"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"time"
 
-	"terminal-app/src/idle_methods/consolidation"
+	"terminal-app/src/consolidator"
+	"terminal-app/src/embedder"
+	"terminal-app/src/idle_methods/episode_memory"
 	"terminal-app/src/prompts"
 	"terminal-app/src/summariser"
 	"terminal-app/src/utils"
+
+	"github.com/philippgille/chromem-go"
 )
 
-// Introspect reads a target episode, sends it to the summariser agent (using the introspection prompt)
-// to generate alternative responses, and saves the reflection to disk.
-func Introspect(episodeID string) error {
-	// 1. Read original episode
-	episodesDir := utils.ResolvePath(filepath.Join("Context", "episodes"))
-	episodePath := filepath.Join(episodesDir, fmt.Sprintf("%s.json", episodeID))
-	
-	data, err := os.ReadFile(episodePath)
-	if err != nil {
-		return fmt.Errorf("failed to read episode %s: %w", episodeID, err)
+// Introspect reads the conversation history, searches for high negative emotion interactions,
+// checks if they are semantically related to the current context, and if so,
+// generates a behavioral strategy fact and saves it to chromem-go.
+func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.EpisodeMemoryManager) error {
+	messages := hm.GetMessages()
+	if len(messages) == 0 {
+		return fmt.Errorf("no conversation history to introspect")
 	}
 
-	var episode consolidation.Episode
-	if err := json.Unmarshal(data, &episode); err != nil {
-		return fmt.Errorf("failed to parse episode %s: %w", episodeID, err)
-	}
-
-	if len(episode.MessageIDs) == 0 {
-		return fmt.Errorf("episode %s has no messages to introspect", episodeID)
-	}
-
-	// Extract SessionID from EpisodeID (format: <SessionID>_ep_<timestamp>)
-	parts := strings.SplitN(episodeID, "_ep_", 2)
-	if len(parts) != 2 {
-		return fmt.Errorf("invalid episode ID format: %s", episodeID)
-	}
-	sessionID := parts[0]
-
-	// Read full history to resolve MessageIDs
-	historyPath := utils.ResolvePath(filepath.Join("Context", "conversationHistory", fmt.Sprintf("%s.json", sessionID)))
-	historyData, err := os.ReadFile(historyPath)
-	if err != nil {
-		return fmt.Errorf("failed to read conversation history %s: %w", sessionID, err)
-	}
-
-	// We need to define or import the Message struct. We can import consolidator and use consolidator.Message.
-	var fullHistory []map[string]interface{}
-	if err := json.Unmarshal(historyData, &fullHistory); err != nil {
-		return fmt.Errorf("failed to parse conversation history: %w", err)
-	}
-
-	// Build a map of msgID -> map for quick lookup
-	msgMap := make(map[string]map[string]interface{})
-	for _, msg := range fullHistory {
-		if id, ok := msg["id"].(string); ok {
-			msgMap[id] = msg
+	var targetIdx int = -1
+	// 1. Context Filtering: Scan history for high Negative Emotion (NE)
+	for i := len(messages) - 1; i >= 0; i-- {
+		msg := messages[i]
+		if msg.MindState != "" {
+			parts := strings.Split(msg.MindState, ":")
+			if len(parts) >= 4 {
+				ne, err := strconv.ParseFloat(parts[1], 64)
+				if err == nil && ne > 0.6 {
+					targetIdx = i
+					break
+				}
+			}
 		}
 	}
 
-	// 2. Format messages for the summariser
-	var convBuilder strings.Builder
-	for _, msgID := range episode.MessageIDs {
-		if msg, ok := msgMap[msgID]; ok {
-			author, _ := msg["author"].(string)
-			content, _ := msg["content"].(string)
-			convBuilder.WriteString(fmt.Sprintf("%s: %s\n", author, content))
+	if targetIdx == -1 {
+		return fmt.Errorf("no highly negative interactions found to introspect on")
+	}
+
+	targetMsg := messages[targetIdx]
+
+	// 2. Semantic Filter: Check if targetMsg is semantically related to current active facts
+	activeEps := episodeMgr.GetActive()
+	if len(activeEps) > 0 {
+		emb := embedder.NewLocalEmbedder()
+		msgEmb, err := emb.Embed(context.Background(), targetMsg.Content)
+		if err == nil {
+			var maxSim float64
+			for _, ep := range activeEps {
+				for _, fact := range ep.Facts {
+					factEmb, err := emb.Embed(context.Background(), fact)
+					if err == nil {
+						sim := embedder.CosineSimilarity(msgEmb, factEmb)
+						if sim > maxSim {
+							maxSim = sim
+						}
+					}
+				}
+			}
+			// If the highest similarity is too low, skip introspection
+			if maxSim < 0.6 {
+				return fmt.Errorf("highest semantic similarity to current context (%.2f) is below threshold, skipping introspection", maxSim)
+			}
 		}
 	}
 
-	// 3. Call SummariserAgent with the Introspection Prompt
-	agent := summariser.NewSummariserAgent()
-	
-	// We need a way to override the system instruction. The SummariserAgent currently loads from config,
-	// but we can modify its config temporarily or we can just call its unexported callLLM if we modify it.
-	// Since SummariserAgent.Summarise defaults to prompts.GetConsolidationPrompt(), we should probably
-	// add a SummariseWithPrompt method or just temporarily change the agent's config.
-	// We will temporarily mutate the agent config (if it's exported, but it's not).
-	// To avoid modifying summariser package heavily, we can add a new method to summariser if needed,
-	// or we can just re-implement a small call here.
-	
-	// Wait, let's look at summariser package. `SummariserAgent` has `Summarise(ctx, text)`. 
-	// We should just use a direct LLM call or modify `summariser.go` to support custom prompts.
-	// For now, I'll assume we can call an updated `SummariseWithPrompt` in `summariser`.
-	rawJSON, err := agent.SummariseWithPrompt(context.Background(), convBuilder.String(), prompts.GetIntrospectionPrompt())
+	// 3. Extract the conversation chunk (e.g., 2 messages before, 2 messages after)
+	startIdx := targetIdx - 2
+	if startIdx < 0 {
+		startIdx = 0
+	}
+	endIdx := targetIdx + 2
+	if endIdx >= len(messages) {
+		endIdx = len(messages) - 1
+	}
+
+	var sb strings.Builder
+	for i := startIdx; i <= endIdx; i++ {
+		sb.WriteString(fmt.Sprintf("%s: %s\n", messages[i].Author, messages[i].Content))
+	}
+	transcript := sb.String()
+
+	// 4. Call SummariserAgent
+	summariserAgent := summariser.NewSummariserAgent()
+
+	sysPrompt := prompts.GetIntrospectionPrompt()
+	respStr, err := summariserAgent.Summarise(context.Background(), sysPrompt+"\n\nTranscript:\n"+transcript)
 	if err != nil {
-		return fmt.Errorf("introspection LLM call failed: %w", err)
+		return fmt.Errorf("failed to call summariser for introspection: %w", err)
 	}
 
-	var llmResp consolidation.LLMResponse
-	if err := json.Unmarshal([]byte(rawJSON), &llmResp); err != nil {
-		return fmt.Errorf("failed to parse introspection JSON: %w (raw: %s)", err, rawJSON)
+	// 5. Parse behavioral_fact
+	var result struct {
+		BehavioralFact string `json:"behavioral_fact"`
+	}
+	if err := json.Unmarshal([]byte(respStr), &result); err != nil {
+		return fmt.Errorf("failed to parse introspection json: %w\nResponse was: %s", err, respStr)
+	}
+	if result.BehavioralFact == "" {
+		return fmt.Errorf("no behavioral fact generated")
 	}
 
-	// 4. Save Reflection JSON
-	reflectionsDir := filepath.Join(episodesDir, "reflections")
-	if err := os.MkdirAll(reflectionsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create reflections directory: %w", err)
-	}
+	factStr := "[BEHAVIORAL STRATEGY] " + result.BehavioralFact
 
-	reflectionID := fmt.Sprintf("%s_reflection", episodeID)
-	reflectionPath := filepath.Join(reflectionsDir, fmt.Sprintf("%s.json", reflectionID))
-	
-	reflectionData := map[string]interface{}{
-		"original_episode_id": episodeID,
-		"reflection_summary":  llmResp.Summary,
-		"alternative_strategy": llmResp.Conclusion,
-	}
-	
-	rBytes, err := json.MarshalIndent(reflectionData, "", "  ")
+	// 6. Insert into chromem-go
+	db, err := chromem.NewPersistentDB(utils.ResolvePath(filepath.Join("Context", "chromem_db")), false)
 	if err != nil {
-		return fmt.Errorf("failed to serialize reflection: %w", err)
+		return fmt.Errorf("failed to init chromem db: %w", err)
 	}
 	
-	if err := os.WriteFile(reflectionPath, rBytes, 0644); err != nil {
-		return fmt.Errorf("failed to write reflection file: %w", err)
-	}
-
-	// 5. Append to reflections.csv
-	csvPath := filepath.Join(episodesDir, "reflections.csv")
-	csvFile, err := os.OpenFile(csvPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	emb := embedder.NewLocalEmbedder()
+	collection, err := db.GetOrCreateCollection("facts", nil, emb.AsChromemEmbeddingFunc())
 	if err != nil {
-		return fmt.Errorf("failed to open reflections.csv: %w", err)
+		return fmt.Errorf("failed to get chromem collection: %w", err)
 	}
-	defer csvFile.Close()
 
-	writer := csv.NewWriter(csvFile)
-	
-	// Check if file is empty to write header
-	stat, _ := csvFile.Stat()
-	if stat.Size() == 0 {
-		writer.Write([]string{"original_episodeid", "keywords", "reflectionid"})
+	timestampStr := strconv.FormatInt(time.Now().Unix(), 10)
+	docID := fmt.Sprintf("introspect_fact_%s", timestampStr)
+	doc := chromem.Document{
+		ID:      docID,
+		Content: factStr,
+		Metadata: map[string]string{
+			"timestamp": timestampStr,
+			"source":    "introspection",
+		},
 	}
-	
-	writer.Write([]string{
-		episodeID,
-		reflectionID,
-	})
-	writer.Flush()
 
-	return writer.Error()
+	if err := collection.AddDocuments(context.Background(), []chromem.Document{doc}, 1); err != nil {
+		return fmt.Errorf("failed to add behavioral fact to chromem: %w", err)
+	}
+
+	return nil
 }

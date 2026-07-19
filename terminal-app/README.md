@@ -34,8 +34,8 @@ While chatting with your Persona, you can use these special commands:
 *   `>>debug`: Bypasses the LLM and prints system status (e.g., current mindstate and active episodes).
 *   `>>mindstate <ma>:<ne>:<pe>:<ua>`: Manually override the current mindstate.
 *   `>>consolidate`: Triggers the Summariser agent to chunk unsaved history into episodic memories.
-*   `>>reflect`: Dynamically loads past episodes with high attention scores and shared keywords into active memory.
-*   `>>introspect <episode_id>`: Offline analysis of a specific episode to generate alternative response strategies.
+*   `>>reflect`: Dynamically loads past conversational facts and behavioral strategies into active memory using semantic vector search.
+*   `>>introspect`: Offline analysis of recent high-emotion conversations to generate alternative response strategies and behavioral facts.
 *   `>>exit`: Terminates the interactive session cleanly and saves your session to the CSV ledger.
 
 *Note: All `>>` commands are intercepted by the system immediately. They bypass heartrate updates, short-term memory (STM), and do not appear in the long-term history logs.*
@@ -130,10 +130,9 @@ The engine handles conversation history via three distinct mechanisms:
 A rolling history is sent inside the JSON payload to the model API under the `"history"` key. This memory is automatically pruned (FIFO) based on character limits. The **Responder** and **Reactor** now maintain decoupled STM tracking to preserve context independently.
 
 ### 2. Episodic Memory (Consolidation)
-Running `>>consolidate` invokes the **Summariser Agent**. It groups unstored conversation history, evaluates peak emotional states, and synthesizes JSON episodes.
-*   Episodes are saved to `Context/episodes/` and their semantic embeddings are indexed in `index.jsonl`.
-*   These are injected back into the Responder's context dynamically, providing long-term relational memory.
-*   The LLM can pin the "most useful" episode to prevent it from being evicted.
+Running `>>consolidate` invokes the **Summariser Agent**. It groups unstored conversation history, evaluates peak emotional states, and synthesizes discrete facts.
+*   Facts are saved directly to a `chromem-go` vector database instead of loose JSON files.
+*   These facts are injected back into the Responder's context dynamically, providing long-term relational memory.
 
 ### 3. Long-Term Persistent Logging
 Every single message (user inputs, assistant replies, mindstate scores) is saved to a session-specific JSON log file located at:
@@ -155,8 +154,8 @@ The framework features a **Reactor Agent** packaged in `reactor/` that monitors 
 ## Reflector Module (Self-Analysis & Context)
 
 The **Reflector Module** (located in `idle_methods/reflector/`) handles dynamic context retrieval and introspective self-analysis using **offline semantic vector embeddings**:
-*   **Reflect (`>>reflect`):** Scans `index.jsonl` for past episodes where the Attention Score (Model Attention + User Attention) was *higher* than the current conversation's attention. It then performs a local Cosine Similarity search using its background `ollama` sidecar engine (a subprocess it manages: spawned on start, killed on exit) to find the most semantically relevant memories, pushing them into active context.
-*   **Introspect (`>>introspect <id>`):** Invokes the Summariser Agent using a specialized `introspection.txt` prompt. It analyzes a past conversation episode to evaluate how the Persona could have responded differently, saving the resulting alternative strategies to `Context/episodes/reflections/` for long-term behavioral adjustment.
+*   **Reflect (`>>reflect`):** Scans the `chromem-go` database for facts that are semantically relevant to the current conversation context, pushing them into active memory. It utilizes a local Cosine Similarity search via its background `ollama` sidecar engine.
+*   **Introspect (`>>introspect`):** Invokes the Summariser Agent using a specialized `introspection.txt` prompt. It scans the history for high Negative Emotion interactions that match the current context, and evaluates how the Persona could have responded differently. It generates a **Behavioral Strategy fact** and saves it to the `chromem-go` database for long-term behavioral adjustment.
 
 **Remote Embedding Configuration:**
 By default, the engine boots a local Ollama sidecar for zero-dependency embeddings. To save resources or run entirely serverless, you can route embedding generation to a remote provider (like Cohere or your own API) by setting these environment variables:

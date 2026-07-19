@@ -13,31 +13,24 @@ import (
 	"terminal-app/src/embedder"
 	"terminal-app/src/summariser"
 	"terminal-app/src/utils"
-)
 
-// Episode represents the JSON structure of a consolidated episodic memory.
-type Episode struct {
-	ID            string   `json:"id"`
-	Summary       string   `json:"summary"`
-	PeakMindState string   `json:"peak_mindstate"`
-	Conclusion    string   `json:"conclusion"`
-	MessageIDs    []string `json:"message_ids"`
-}
+	"github.com/philippgille/chromem-go"
+)
 
 // LLMResponse matches the structured JSON expected from the Summariser LLM.
 type LLMResponse struct {
-	Summary    string   `json:"summary"`
-	Conclusion string   `json:"conclusion"`
+	MetricHistory []map[string]string `json:"metric_history"`
+	FactArray     []string            `json:"factArray"`
 }
 
-// EpisodeSummary is a lightweight, metadata-only view of an episode returned after consolidation.
-// It contains no raw message data — only enough for the runtime episode memory manager.
+// EpisodeSummary is a lightweight view returned after consolidation.
 type EpisodeSummary struct {
 	ID            string   `json:"id"`
-	Summary       string   `json:"summary"`
+	Facts         []string `json:"facts"`
 	PeakMindState string   `json:"peak_mindstate"`
-	Conclusion    string   `json:"conclusion"`
 }
+
+
 
 // Consolidate reads unsaved messages from history, groups them by character length,
 // calls the summariser agent to generate metadata, saves them to episode JSON/CSV files,
@@ -138,42 +131,46 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 		if err := json.Unmarshal([]byte(rawJSON), &llmResp); err != nil {
 			// Resilient fallback if LLM output is not valid JSON
 			llmResp = LLMResponse{
-				Summary:    "Failed to parse model summary. raw response: " + rawJSON,
-				Conclusion: "Parsed error conclusion.",
+				MetricHistory: []map[string]string{},
+				FactArray:     []string{"Failed to parse model facts. raw response: " + rawJSON},
 			}
 		}
 
-		// Save Episode JSON. Use UnixNano to ensure uniqueness across multiple consolidation runs.
 		episodeID := fmt.Sprintf("%s_ep_%d", hm.SessionID, time.Now().UnixNano())
-		episode := Episode{
-			ID:            episodeID,
-			Summary:       llmResp.Summary,
-			PeakMindState: peakMindState,
-			Conclusion:    llmResp.Conclusion,
-			MessageIDs:    chunkMsgIDs,
-		}
+		deltasStr, _ := json.Marshal(llmResp.MetricHistory)
+		timestampStr := time.Now().Format(time.RFC3339)
 
-		episodePath := filepath.Join(episodesDir, fmt.Sprintf("%s.json", episodeID))
-		episodeData, err := json.MarshalIndent(episode, "", "  ")
+		// Save to chromem-go
+		db, err := chromem.NewPersistentDB(utils.ResolvePath(filepath.Join("Context", "chromem_db")), false)
 		if err != nil {
-			return nil, fmt.Errorf("failed to serialize episode %s: %w", episodeID, err)
+			return nil, fmt.Errorf("failed to init chromem db: %w", err)
 		}
-
-		if err := os.WriteFile(episodePath, episodeData, 0644); err != nil {
-			return nil, fmt.Errorf("failed to write episode file %s: %w", episodePath, err)
-		}
-
-		// Generate Embedding
+		
 		emb := embedder.NewLocalEmbedder()
-		vec, err := emb.Embed(context.Background(), llmResp.Summary)
+		collection, err := db.GetOrCreateCollection("facts", nil, emb.AsChromemEmbeddingFunc())
 		if err != nil {
-			fmt.Printf("[DEBUG] Failed to generate embedding for %s: %v\n", episodeID, err)
-			vec = []float32{} // Fallback empty
+			return nil, fmt.Errorf("failed to get chromem collection: %w", err)
 		}
 
-		// Append to JSONL Index
-		if err := appendToIndexJSONL(episodesDir, peakMindState, vec, episodeID); err != nil {
-			return nil, fmt.Errorf("failed to write to index JSONL: %w", err)
+		var docs []chromem.Document
+		for i, factStr := range llmResp.FactArray {
+			factID := fmt.Sprintf("%s_fact_%d", episodeID, i)
+			docs = append(docs, chromem.Document{
+				ID:      factID,
+				Content: factStr,
+				Metadata: map[string]string{
+					"episode_id":    episodeID,
+					"timestamp":     timestampStr,
+					"metric_deltas": string(deltasStr),
+				},
+			})
+		}
+		
+		if len(docs) > 0 {
+			// Use 1 concurrency as we are in a background process anyway and want to avoid overwhelming local embedding API
+			if err := collection.AddDocuments(context.Background(), docs, 1); err != nil {
+				fmt.Printf("[DEBUG] Failed to add documents to chromem: %v\n", err)
+			}
 		}
 
 		// Mark the messages in HistoryManager as stored on disk
@@ -186,9 +183,8 @@ func Consolidate(hm *consolidator.HistoryManager) ([]EpisodeSummary, error) {
 		// Collect the summary for the runtime memory manager
 		newEpisodes = append(newEpisodes, EpisodeSummary{
 			ID:            episodeID,
-			Summary:       llmResp.Summary,
+			Facts:         llmResp.FactArray,
 			PeakMindState: peakMindState,
-			Conclusion:    llmResp.Conclusion,
 		})
 	}
 
@@ -208,32 +204,3 @@ func calculateActivationScore(mindState string) float64 {
 	return ne + pe
 }
 
-type EpisodeIndex struct {
-	EpisodeID     string    `json:"episode_id"`
-	PeakMindState string    `json:"peak_mindstate"`
-	Embedding     []float32 `json:"embedding"`
-}
-
-// appendToIndexJSONL appends the episode embedding to the central index file.
-func appendToIndexJSONL(dir, peakMindState string, embedding []float32, episodeID string) error {
-	jsonlPath := filepath.Join(dir, "index.jsonl")
-	file, err := os.OpenFile(jsonlPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	entry := EpisodeIndex{
-		EpisodeID:     episodeID,
-		PeakMindState: peakMindState,
-		Embedding:     embedding,
-	}
-
-	data, err := json.Marshal(entry)
-	if err != nil {
-		return err
-	}
-
-	_, err = file.Write(append(data, '\n'))
-	return err
-}

@@ -55,9 +55,14 @@ func GetConsolidationPrompt() string {
 //go:embed introspection.txt
 var rawIntrospectionPrompt string
 
-// GetIntrospectionPrompt returns the introspection base prompt.
+// GetIntrospectionPrompt returns the introspection base prompt combined with the personality prompt if defined.
 func GetIntrospectionPrompt() string {
-	return injectPersonalityName(strings.TrimSpace(rawIntrospectionPrompt))
+	pers := strings.TrimSpace(rawPersonalityPrompt)
+	base := injectPersonalityName(strings.TrimSpace(rawIntrospectionPrompt))
+	if pers == "" {
+		return base
+	}
+	return fmt.Sprintf("%s\n\nPersonality guidelines:\n%s", base, pers)
 }
 
 //go:embed proactive_message.txt
