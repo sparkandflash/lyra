@@ -79,8 +79,7 @@ type readliner interface {
 }
 
 func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl readliner, reactorCharThreshold int) {
-	inputLockedUntil := time.Time{}
-
+	
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -93,17 +92,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 	}()
 	
 	for {
-		var activeProcessChan <-chan api.ChatInput
-		var lockTimer <-chan time.Time
-		if time.Now().After(inputLockedUntil) {
-			activeProcessChan = c.InputQueue
-		} else {
-			lockTimer = time.After(time.Until(inputLockedUntil))
-		}
-
 		select {
-		case <-lockTimer:
-			// Wake up when input lock expires
 		case evt := <-c.Sched.EventChan:
 			switch evt {
 			case escalator.EventConsolidate:
@@ -229,7 +218,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 			}
 
-		case rawInput := <-activeProcessChan:
+		case rawInput := <-c.InputQueue:
 			input := strings.TrimSpace(rawInput.Message)
 			
 			// Handle exits immediately before triggering wake logic
@@ -343,7 +332,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 			
 			// 3-second minimum delay
 			startTime := time.Now()
-			done := make(chan bool)
+			done := make(chan bool, 1)
 			go func() {
 				// With async printing, we avoid scrambling the terminal with raw \r returns.
 				fmt.Fprintf(c.OutWriter, "\033[34m> [thinking...]\033[0m\n")

@@ -16,3 +16,10 @@ analysis/venv/
 analysis/__pycache__/
 analysis/*.png
 *.csv
+
+# Built Binaries
+terminal-app/terminal-app
+terminal-app/test_app
+terminal-app/clyde_meyers
+terminal-app/debug.log
+!terminal-app/samples/*
