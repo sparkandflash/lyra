@@ -1,5 +1,7 @@
 # MSRPEngine
 
+![AI Memory Architecture](docs/ai-mem.png)
+
 Welcome to **MSRPEngine** (Mind State Reactive Personality Engine)—an experimental project designed to decouple the concept of an AI's "Subconscious System" from its "Personality". 
 
 This architecture allows developers to create deeply stateful, emotionally intelligent companions. The underlying engine runs continuously in the background, managing complex memory structures, evaluating emotional context, and initiating proactive actions, while the specific "Persona" is seamlessly loaded on top as the conversational interface.
@@ -44,6 +46,7 @@ To dive into the technical details, configure the API keys, and build your own p
 Now that the core MSRPEngine is cleanly decoupled and isolated in its own terminal-app architecture, future development will expand into new interfaces:
 *   **Discord Bot Integration:** Exposing the engine as an active participant in Discord servers.
 *   **Browser-Based Web App:** A rich HTML/CSS/JS interface running locally or deployed to the web.
+*   **Messaging Logic Adjustments:** Lyra will think before replying to the user, or decide not to respond. She will take her time, and her replies need not be instantaneous.
 *   **Lyra's Soul / Personality Architecture (Future Exploration):**
     *   **Fixed Core + Mutable Layer:** Implementing a short, concrete core identity (values logic, earned warmth) that never changes, combined with a mutable trait layer that accumulates and evolves on top of it.
     *   **Trait Acquisition Sources:** Traits picked up from interactions across *multiple* users (so no single person dominates) and through wiki/web searches during introspection to give her external interests.
