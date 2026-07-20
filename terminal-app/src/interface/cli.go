@@ -140,6 +140,21 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 	// SYSTEM_EPISODE_MEMORY_CHARS controls the runtime episode pool's character budget (default 2000).
 	episodeMgr := episode_memory.LoadEpisodeMemoryManagerFromEnv()
 
+	// ── Character Limits ──────────────────────────────────────────────────────
+	maxInputChars := 200
+	if limitStr := os.Getenv("SYSTEM_MAX_INPUT_CHARS"); limitStr != "" {
+		if _, err := fmt.Sscanf(limitStr, "%d", &maxInputChars); err != nil || maxInputChars <= 0 {
+			maxInputChars = 200
+		}
+	}
+	
+	maxOutputChars := 200
+	if limitStr := os.Getenv("SYSTEM_MAX_OUTPUT_CHARS"); limitStr != "" {
+		if _, err := fmt.Sscanf(limitStr, "%d", &maxOutputChars); err != nil || maxOutputChars <= 0 {
+			maxOutputChars = 200
+		}
+	}
+
 	// ── Session Resolution ───────────────────────────────────────────────────
 	historyDir := utils.ResolvePath(filepath.Join("Context", "conversationHistory"))
 	os.MkdirAll(historyDir, 0755)
@@ -203,6 +218,8 @@ func Run(newSession bool, reuseSession string, debugMode bool, noInterface bool)
 		MindStateVal:    "0.10:0.70:0.10:0.10:0.10",
 		DebugMode:       debugMode,
 		PersonalityName: personalityName,
+		MaxInputChars:   maxInputChars,
+		MaxOutputChars:  maxOutputChars,
 	}
 
 	if savedMindState != "" {

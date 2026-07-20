@@ -42,6 +42,9 @@ type AppCore struct {
 	InputQueue      chan api.ChatInput
 	
 	UnreactedChars  int
+	
+	MaxInputChars   int
+	MaxOutputChars  int
 }
 
 func (c *AppCore) GetMindState() string {
@@ -181,6 +184,12 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 
 				reply, usefulEpisodeID, err := c.Resp.RespondProactive(ctx, c.GetMindState(), c.ResponderSTM.GetNoFlags(), episodes)
 				if err == nil {
+					// Enforce output character limit
+					replyRunes := []rune(reply)
+					if len(replyRunes) > c.MaxOutputChars {
+						reply = string(replyRunes[:c.MaxOutputChars])
+					}
+
 					if usefulEpisodeID != "" {
 						c.EpisodeMgr.MarkUseful(usefulEpisodeID)
 					}
@@ -221,6 +230,12 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 		case rawInput := <-c.InputQueue:
 			input := strings.TrimSpace(rawInput.Message)
 			
+			// Enforce input character limit
+			inputRunes := []rune(input)
+			if len(inputRunes) > c.MaxInputChars {
+				input = string(inputRunes[:c.MaxInputChars])
+			}
+
 			// Handle exits immediately before triggering wake logic
 			if input == ">>exit" {
 				if rl != nil { rl.Close() }
@@ -418,6 +433,12 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				done <- true
 				fmt.Fprintf(c.OutWriter, "\033[31merror: failed to generate response: %v\033[0m\n", err)
 			} else {
+				// Enforce output character limit
+				replyRunes := []rune(reply)
+				if len(replyRunes) > c.MaxOutputChars {
+					reply = string(replyRunes[:c.MaxOutputChars])
+				}
+
 				if c.DebugMode {
 					fmt.Fprintf(c.OutWriter, "[DEBUG] Responder: Output received (Useful Episode ID: %q)\n", usefulEpisodeID)
 				}
