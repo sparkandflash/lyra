@@ -18,7 +18,6 @@ func main() {
 	newSession := flag.Bool("newSession", false, "Start a fresh session ignoring previous history")
 	reuseSession := flag.String("reuseSession", "", "Reuse a specific session ID")
 	debug := flag.Bool("debug", false, "Run in debug mode with verbose logging")
-	noInterface := flag.Bool("no-interface", false, "Run headlessly without interactive terminal")
 	flag.Parse()
 
 	// Load .env relative to the executable path for standalone support
@@ -49,8 +48,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	noInterface := os.Getenv("SYSTEM_NO_INTERFACE") == "true"
+
 	fmt.Println("\033[32mAll agents validated successfully. Starting chat...\033[0m")
-	if *noInterface { *debug = true }
-	cli.Run(*newSession, *reuseSession, *debug, *noInterface)
+	if noInterface { *debug = true }
+	cli.Run(*newSession, *reuseSession, *debug, noInterface)
 }
 
