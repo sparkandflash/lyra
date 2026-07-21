@@ -9,10 +9,10 @@ import (
 	"strings"
 	"time"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/embedder"
-	"terminal-app/src/summariser"
-	"terminal-app/src/utils"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/embedder"
+	"msrpengine/src/summariser"
+	"msrpengine/src/utils"
 
 	"github.com/philippgille/chromem-go"
 )

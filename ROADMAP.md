@@ -22,7 +22,9 @@ The memory system is the foundation. Everything else (personality, dreams) sits 
 *   **Wikipedia / External Search:** A basic tool allowing the responder to seek info outside its context.
 *   **Provenance / Origin Tracking:** Every fact must know its origin (e.g., Interface History, Wikipedia, Dream, Personality Inference). This allows the Retriever to distinguish between "I experienced this" and "I read this."
 *   **Memory Scaling & Concurrency:** As the memory graph grows, the system will process memories in isolated "chunks" and rotate them. Idle methods (like linking and model creation) will run concurrently across different chunks. The architecture will also support spinning up multiple parallel `Responder + Context` instances.
-
+*   **Memory Splitting (Objective vs. Subjective):** Memories will be structurally divided into two distinct categories:
+    *   **Objective Memory:** Immutable, raw records of reality (e.g., interaction history, factual summaries).
+    *   **Subjective Memory:** Fluid, engine-generated interpretations (e.g., processed memories, semantic linking, and Candidate Models).
 ---
 
 ## V4: Personality Architecture

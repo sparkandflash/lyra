@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/prompts"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/prompts"
 )
 
 // EpisodeSummary is a lightweight episode view passed to the responder LLM as episodic context.

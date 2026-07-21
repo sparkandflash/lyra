@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"terminal-app/src/consolidator"
+	"msrpengine/src/consolidator"
 )
 
 func TestCalculateActivationScore(t *testing.T) {

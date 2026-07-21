@@ -1,4 +1,4 @@
-module terminal-app
+module msrpengine
 
 go 1.25.7
 

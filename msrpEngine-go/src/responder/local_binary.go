@@ -7,8 +7,8 @@ import (
 	"os/exec"
 	"strings"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/prompts"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/prompts"
 )
 
 type LocalBinaryResponder struct {

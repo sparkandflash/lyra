@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/prompts"
-	"terminal-app/src/responder"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/prompts"
+	"msrpengine/src/responder"
 )
 
 // ReactorResponse represents the structured JSON output expected from the LLM.

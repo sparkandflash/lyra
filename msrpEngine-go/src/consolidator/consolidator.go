@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	"terminal-app/src/utils"
+	"msrpengine/src/utils"
 )
 
 // Message represents a single chat turn with an ID, role, content, mindstate, and stored flag.

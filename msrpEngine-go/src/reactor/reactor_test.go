@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"terminal-app/src/consolidator"
+	"msrpengine/src/consolidator"
 )
 
 func TestCleanJSONResponse(t *testing.T) {

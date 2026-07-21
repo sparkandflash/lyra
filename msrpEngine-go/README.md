@@ -11,7 +11,7 @@ MSRPEngine features a **dual-memory system** (Short-Term Memory + Episodic Long-
 ### 1. How to Run a Sample Binary (Quickstart)
 We provide pre-compiled bots in the `samples/` folder for demonstration purposes. These are ready to run instantly!
 
-1. Navigate to one of the sample folders (e.g., `cd terminal-app/samples/lyra`).
+1. Navigate to one of the sample folders (e.g., `cd msrpengine/samples/lyra`).
 2. Open the `.env` file and configure your API keys (e.g. `SYSTEM_RESPONDER_API_KEY`).
 3. Run the binary! (e.g., double click `lyra` or run `./lyra` in the terminal).
 
@@ -20,10 +20,10 @@ We provide pre-compiled bots in the `samples/` folder for demonstration purposes
 ### 2. How to Build Your Own Binary
 If you want to create a brand new bot with a custom personality, you compile it from the source code.
 
-1. Open `terminal-app/src/prompts/personality.txt` and write the core prompt/identity for your new bot.
+1. Open `msrpengine/src/prompts/personality.txt` and write the core prompt/identity for your new bot.
 2. Open a terminal and run the build script, providing the name of the binary you want to create:
    ```bash
-   cd terminal-app
+   cd msrpengine
    ./build.sh my_custom_bot
    ```
 3. Your compiled binary will be waiting for you in the `build/` folder!

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/prompts"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/prompts"
 )
 
 type MockResponder struct {

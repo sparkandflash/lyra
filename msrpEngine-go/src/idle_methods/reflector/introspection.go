@@ -9,12 +9,12 @@ import (
 	"strings"
 	"time"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/embedder"
-	"terminal-app/src/idle_methods/episode_memory"
-	"terminal-app/src/prompts"
-	"terminal-app/src/summariser"
-	"terminal-app/src/utils"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/embedder"
+	"msrpengine/src/idle_methods/episode_memory"
+	"msrpengine/src/prompts"
+	"msrpengine/src/summariser"
+	"msrpengine/src/utils"
 
 	"github.com/philippgille/chromem-go"
 )

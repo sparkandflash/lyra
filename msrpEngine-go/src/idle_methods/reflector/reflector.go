@@ -7,10 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"terminal-app/src/embedder"
-	"terminal-app/src/idle_methods/episode_memory"
-	"terminal-app/src/responder"
-	"terminal-app/src/utils"
+	"msrpengine/src/embedder"
+	"msrpengine/src/idle_methods/episode_memory"
+	"msrpengine/src/responder"
+	"msrpengine/src/utils"
 
 	"github.com/philippgille/chromem-go"
 )

@@ -11,8 +11,8 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/escalator"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/escalator"
 )
 
 // (Globals removed because they evaluated before main() loaded .env)

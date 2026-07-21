@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"time"
 
-	"terminal-app/src/consolidator"
-	"terminal-app/src/prompts"
+	"msrpengine/src/consolidator"
+	"msrpengine/src/prompts"
 )
 
 type GeminiResponder struct {

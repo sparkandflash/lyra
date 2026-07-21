@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"terminal-app/src/prompts"
-	"terminal-app/src/responder"
+	"msrpengine/src/prompts"
+	"msrpengine/src/responder"
 )
 
 // SummariserAgent runs standard conversation summarization tasks.

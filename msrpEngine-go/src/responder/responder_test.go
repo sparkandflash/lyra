@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"terminal-app/src/consolidator"
+	"msrpengine/src/consolidator"
 )
 
 func TestNewResponderFromEnv(t *testing.T) {

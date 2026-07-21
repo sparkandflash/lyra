@@ -7,7 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"terminal-app/src/consolidator"
+	"msrpengine/src/consolidator"
 )
 
 //go:embed models/default.gguf
