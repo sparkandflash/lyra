@@ -5,10 +5,10 @@
 Context/
 
 # Build Directory (Standalone Binaries and their Contexts)
-terminal-app/build/
+msrpEngine-go/build/
 
 # Local Embedding Sidecar and ML Models
-terminal-app/.bin/
+msrpEngine-go/.bin/
 old-contexts
 
 # Python & Analysis Tools
@@ -18,8 +18,8 @@ analysis/*.png
 *.csv
 
 # Built Binaries
-terminal-app/terminal-app
-terminal-app/test_app
-terminal-app/clyde_meyers
-terminal-app/debug.log
-!terminal-app/samples/*
+msrpEngine-go/terminal-app
+msrpEngine-go/test_app
+msrpEngine-go/clyde_meyers
+msrpEngine-go/debug.log
+!msrpEngine-go/samples/*
