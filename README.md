@@ -16,7 +16,7 @@ Traditional LLMs are stateless request-response machines. This engine transforms
 ## Engine Features
 
 ### 1. Biological "Mindstate" Tracking
-The System continuously monitors five indicators during conversation:
+The System continuously monitors five indicators during interactions:
 *   `Model Attention`
 *   `User Attention`
 *   `Serotonin` (Happiness / Sadness)
@@ -26,7 +26,7 @@ The System continuously monitors five indicators during conversation:
 These biological states dictate the engine's behavior. A high Cortisol score triggers the Persona to act panicked or stressed, while low Oxytocin triggers defensiveness. Crucially, these hormones act as multipliers for the engine's physical exhaustion.
 
 ### 2. Dual-Memory System
-*   **Short-Term Memory (STM):** A highly constrained, rolling buffer of the immediate conversation.
+*   **Short-Term Memory (STM):** A highly constrained, rolling buffer of the immediate interface history.
 *   **Long-Term Episodic Memory:** The System runs background "Consolidation" agents that read raw STM logs, summarize them, extract keywords, and bake them into permanent JSON "episodes" stored on disk. When similar topics arise in the future, a "Reflector" agent dynamically fetches relevant past episodes and injects them into the Persona's context window.
 
 ### 3. Biological Rhythms (Escalator)
