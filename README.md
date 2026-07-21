@@ -43,17 +43,7 @@ The engine is self-contained within a portable directory containing the executab
 To dive into the technical details, configure the API keys, and build your own portable Persona bots, head over to the [Terminal App Documentation](terminal-app/README.md).
 
 ## Roadmap
-Now that the core MSRPEngine is cleanly decoupled and isolated in its own terminal-app architecture, future development will expand into new interfaces:
-*   **Discord Bot Integration:** Exposing the engine as an active participant in Discord servers.
-*   **Browser-Based Web App:** A rich HTML/CSS/JS interface running locally or deployed to the web.
-*   **Messaging Logic Adjustments:** Lyra will think before replying to the user, or decide not to respond. She will take her time, and her replies need not be instantaneous.
-*   **Lyra's Soul / Personality Architecture (Future Exploration):**
-    *   **Fixed Core + Mutable Layer:** Implementing a short, concrete core identity (values logic, earned warmth) that never changes, combined with a mutable trait layer that accumulates and evolves on top of it.
-    *   **Trait Acquisition Sources:** Traits picked up from interactions across *multiple* users (so no single person dominates) and through wiki/web searches during introspection to give her external interests.
-    *   **The Soul Score (Trait Retention Gate):** Gating trait retention on the *intensity* of mindstate movement (meaningful spikes in Serotonin, Oxytocin, Cortisol, or Attention), not just positive valence. This resolves the sycophancy trap by rewarding "pissed the user off" equally to "pleased the user."
-    *   **Asymmetric Friction:** Making it easier to add a new trait than to remove an established one, ensuring personality development compounds rather than flip-flops on noisy single-episode data.
-    *   **Open Risks to Address:** 
-        *   Mitigating "intensity-maximization" reward hacking (where chaos and depth look identical to an intensity-only gate).
-        *   Explicitly designing attribution/decay for multi-user trait pickups to prevent raw conversation volume from a single user recreating the mirror problem.
-        *   Implementing a decay-on-long-absence exception so early traits don't gain disproportionate permanence simply due to timing.
-        *   Logging trait provenance (user, timestamp, persistence) from day one to diagnose whether the multi-user "natural pattern formation" succeeds or produces mush.
+
+The detailed evolutionary plan for MSRPEngine, including the upcoming memory rewrite (V3), personality emergence (V4), and dreaming functionality (V5), has been moved to its own document. 
+
+Please see the [ROADMAP.md](ROADMAP.md) for full details.
