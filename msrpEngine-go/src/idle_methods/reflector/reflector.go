@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"msrpengine/src/embedder"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/idle_methods/episode_memory"
 	"msrpengine/src/agents/responder"
 	"msrpengine/src/utils"
@@ -38,7 +38,7 @@ func Reflect(currentMindState string, activeEpisodes []responder.EpisodeSummary)
 		return nil, nil // db probably doesn't exist yet
 	}
 
-	emb := embedder.NewLocalEmbedder()
+	emb := contextManager.NewLocalEmbedder()
 	collection, err := db.GetOrCreateCollection("facts", nil, emb.AsChromemEmbeddingFunc())
 	if err != nil {
 		return nil, nil

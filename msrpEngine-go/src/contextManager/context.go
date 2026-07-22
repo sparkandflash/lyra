@@ -1,4 +1,4 @@
-package consolidator
+package contextManager
 
 import (
 	"encoding/json"
@@ -12,7 +12,7 @@ import (
 )
 
 // Message represents a single chat turn with an ID, role, content, mindstate, and stored flag.
-type Message struct {
+type InterfaceEvent struct {
 	ID        string `json:"id"`
 	Author    string `json:"author"`
 	Content   string `json:"content"`
@@ -20,50 +20,50 @@ type Message struct {
 	Stored    bool   `json:"stored"`
 }
 
-// STMmanager manages the rolling short term memory of the chat.
-type STMmanager struct {
+// ShortTermContext manages the rolling short term memory of the chat.
+type ShortTermContext struct {
 	mu       sync.RWMutex
 	maxChars int
-	messages []Message
+	messages []InterfaceEvent
 }
 
-// NewSTMmanager initializes a new STMmanager with a maximum character limit.
-func NewSTMmanager(maxChars int) *STMmanager {
-	return &STMmanager{
+// NewShortTermContext initializes a new ShortTermContext with a maximum character limit.
+func NewShortTermContext(maxChars int) *ShortTermContext {
+	return &ShortTermContext{
 		maxChars: maxChars,
-		messages: []Message{},
+		messages: []InterfaceEvent{},
 	}
 }
 
 // Get returns all messages currently stored in short term memory.
-func (m *STMmanager) Get() []Message {
+func (m *ShortTermContext) Get() []InterfaceEvent {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	cp := make([]Message, len(m.messages))
+	cp := make([]InterfaceEvent, len(m.messages))
 	copy(cp, m.messages)
 	return cp
 }
 
 // GetNoFlags returns all messages in STM with only ID, Author, and Content populated.
 // MindState and Stored flags are omitted — this is the clean view sent to the responder LLM.
-func (m *STMmanager) GetNoFlags() []Message {
+func (m *ShortTermContext) GetNoFlags() []InterfaceEvent {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	clean := make([]Message, len(m.messages))
+	clean := make([]InterfaceEvent, len(m.messages))
 	for i, msg := range m.messages {
-		clean[i] = Message{ID: msg.ID, Author: msg.Author, Content: msg.Content}
+		clean[i] = InterfaceEvent{ID: msg.ID, Author: msg.Author, Content: msg.Content}
 	}
 	return clean
 }
 
 // Update appends a message and discards older ones (FIFO) until the total character length is within the maxChars limit.
-func (m *STMmanager) Update(role string, content string) {
+func (m *ShortTermContext) Update(role string, content string) {
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
 	
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	m.messages = append(m.messages, Message{ID: msgID, Author: role, Content: content})
+	m.messages = append(m.messages, InterfaceEvent{ID: msgID, Author: role, Content: content})
 
 	// FIFO pruning based on the character length of the contents
 	for m.totalChars() > m.maxChars && len(m.messages) > 0 {
@@ -72,7 +72,7 @@ func (m *STMmanager) Update(role string, content string) {
 }
 
 // totalChars calculates the sum of characters of all messages in short term memory.
-func (m *STMmanager) totalChars() int {
+func (m *ShortTermContext) totalChars() int {
 	// Callers must hold lock
 	sum := 0
 	for _, msg := range m.messages {
@@ -81,29 +81,29 @@ func (m *STMmanager) totalChars() int {
 	return sum
 }
 
-// HistoryManager manages the persistent log of the full conversation.
-type HistoryManager struct {
+// EventLogContext manages the persistent log of the full conversation.
+type EventLogContext struct {
 	mu        sync.RWMutex
 	SessionID string
 	filePath  string
-	messages  []Message
+	messages  []InterfaceEvent
 }
 
-// NewHistoryManager initializes a persistent history manager for a given SessionID.
+// NewEventLogContext initializes a persistent history manager for a given SessionID.
 // If the session file already exists, it loads the historical messages into memory.
-func NewHistoryManager(sessionID string) (*HistoryManager, error) {
+func NewEventLogContext(sessionID string) (*EventLogContext, error) {
 	if sessionID == "" {
 		sessionID = time.Now().Format("20060102-150405")
 	}
 
-	dir := utils.ResolvePath(filepath.Join("Context", "conversationHistory"))
+	dir := utils.ResolvePath(filepath.Join("Context", "interfaceEventLog"))
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create conversationHistory directory: %w", err)
+		return nil, fmt.Errorf("failed to create interfaceEventLog directory: %w", err)
 	}
 
 	filePath := filepath.Join(dir, fmt.Sprintf("%s.json", sessionID))
 
-	messages := []Message{}
+	messages := []InterfaceEvent{}
 	
 	// If the file exists, attempt to load it
 	if _, err := os.Stat(filePath); err == nil {
@@ -123,7 +123,7 @@ func NewHistoryManager(sessionID string) (*HistoryManager, error) {
 		}
 	}
 
-	return &HistoryManager{
+	return &EventLogContext{
 		SessionID: sessionID,
 		filePath:  filePath,
 		messages:  messages,
@@ -131,13 +131,13 @@ func NewHistoryManager(sessionID string) (*HistoryManager, error) {
 }
 
 // Save appends a new message to the persistent history and writes the full log to disk.
-func (h *HistoryManager) Save(role string, content string, mindState string) error {
+func (h *EventLogContext) Save(role string, content string, mindState string) error {
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
 	
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.messages = append(h.messages, Message{ID: msgID, Author: role, Content: content, MindState: mindState, Stored: false})
+	h.messages = append(h.messages, InterfaceEvent{ID: msgID, Author: role, Content: content, MindState: mindState, Stored: false})
 
 	data, err := json.MarshalIndent(h.messages, "", "  ")
 	if err != nil {
@@ -152,16 +152,16 @@ func (h *HistoryManager) Save(role string, content string, mindState string) err
 }
 
 // GetMessages returns a copy of all messages currently stored in the history manager.
-func (h *HistoryManager) GetMessages() []Message {
+func (h *EventLogContext) GetMessages() []InterfaceEvent {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	cp := make([]Message, len(h.messages))
+	cp := make([]InterfaceEvent, len(h.messages))
 	copy(cp, h.messages)
 	return cp
 }
 
 // MarkStored flags messages in the range [start, end) as stored and writes the updated array back to disk.
-func (h *HistoryManager) MarkStored(start, end int) error {
+func (h *EventLogContext) MarkStored(start, end int) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 

@@ -1,3 +1,11 @@
 - create a agents folder, which will contain a common constructor method
 and subfolders with all the agents which will use the constructor method in it
 - next step, master character limits for each agent, define it in config, use to validate other limits so they do not cross the master limits when totaled.
+
+next set 
+- what does consolidation and consolidator do, how are they related to each other. (i forgot)
+
+- move embedder to context manager
+
+-ContextMessage --> make this interfaceEvent. 
+interfaceEvent can be a usermessage/userjoin/userleaving/systemevents/responderMessage.

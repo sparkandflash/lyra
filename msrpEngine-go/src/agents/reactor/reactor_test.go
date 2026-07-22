@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"msrpengine/src/consolidator"
+	"msrpengine/src/contextManager"
 )
 
 func TestCleanJSONResponse(t *testing.T) {
@@ -49,7 +49,7 @@ func TestMockReactorEscalation(t *testing.T) {
 	agent := NewReactorAgent()
 
 	// 1. Test positive input
-	historyPositive := []consolidator.Message{
+	historyPositive := []contextManager.InterfaceEvent{
 		{Author: "user", Content: "I am so excited and happy right now!"},
 		{Author: "assistant", Content: "That is wonderful!"},
 	}
@@ -62,7 +62,7 @@ func TestMockReactorEscalation(t *testing.T) {
 	}
 
 	// 2. Test negative input
-	historyNegative := []consolidator.Message{
+	historyNegative := []contextManager.InterfaceEvent{
 		{Author: "user", Content: "I absolutely despise this terrible situation and I hate it!"},
 		{Author: "assistant", Content: "I'm so sorry you feel that way."},
 	}
@@ -75,7 +75,7 @@ func TestMockReactorEscalation(t *testing.T) {
 	}
 
 	// 3. Test stable/default input
-	historyStable := []consolidator.Message{
+	historyStable := []contextManager.InterfaceEvent{
 		{Author: "user", Content: "Standard text."},
 	}
 	resp, err = agent.React(context.Background(), historyStable)
