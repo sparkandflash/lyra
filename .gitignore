@@ -6,6 +6,8 @@ Context/
 
 # Build Directory (Standalone Binaries and their Contexts)
 msrpEngine-go/build/
+bin/
+msrpEngine-go/bin/
 
 # Local Embedding Sidecar and ML Models
 msrpEngine-go/.bin/
