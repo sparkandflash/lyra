@@ -2,34 +2,34 @@ package engineInterface
 
 import (
 	"context"
-	"encoding/csv"
-	"os/exec"
-	"path/filepath"
-	"msrpengine/src/utils"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"msrpengine/src/consolidator"
+	"msrpengine/src/agents/reactor"
+	"msrpengine/src/agents/responder"
+	
 	"msrpengine/src/escalator"
 	"msrpengine/src/idle_methods/consolidation"
 	"msrpengine/src/idle_methods/episode_memory"
 	"msrpengine/src/idle_methods/reflector"
 	"msrpengine/src/interface/api"
-	"msrpengine/src/agents/reactor"
-	"msrpengine/src/agents/responder"
+	"msrpengine/src/contextManager"
+	"msrpengine/src/utils"
 )
 
 type AppCore struct {
-	HistoryMgr      *consolidator.HistoryManager
+	HistoryMgr      *contextManager.EventLogContext
 	EpisodeMgr      *episode_memory.EpisodeMemoryManager
-	ReactorSTM      *consolidator.STMmanager
-	ResponderSTM    *consolidator.STMmanager
+	ReactorSTM      *contextManager.ShortTermContext
+	ResponderSTM    *contextManager.ShortTermContext
 	Sched           *escalator.Scheduler
 	Resp            *responder.Responder
 	ReactorAgent    *reactor.ReactorAgent
@@ -85,7 +85,7 @@ type readliner interface {
 	Close() error
 }
 
-func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl readliner, reactorCharThreshold int) {
+func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl readliner) {
 	
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
@@ -94,7 +94,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 		// If we receive a kill signal, save state and exit directly
 		sysMsg := "session ended abruptly"
 		c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
-		updateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
+		contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 		os.Exit(0)
 	}()
 	
@@ -117,7 +117,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 						PeakMindState: e.PeakMindState,
 					})
 				}
-				newEpisodes, err := consolidation.Consolidate(c.HistoryMgr, activeEps)
+				newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, activeEps)
 				if err == nil {
 					for _, ep := range newEpisodes {
 						c.EpisodeMgr.Push(episode_memory.EpisodeSummary{
@@ -136,8 +136,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				c.InjectSystemMessage(sysMsg)
 				c.SetUnconsolidated(true)
 			case escalator.EventEnterTrueSleep:
-				delay := os.Getenv("SYSTEM_TRUE_SLEEP_DELAY_MINS")
-				if delay == "" { delay = "180" }
+				delay := fmt.Sprintf("%d", utils.Config.TrueSleepDelayMins)
 				sysMsg := fmt.Sprintf("[System: it has been %s mins since user last responded, starting hibernation.]", delay)
 				if c.DebugMode {
 					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
@@ -246,14 +245,14 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				fmt.Printf("\r\033[2K\r") // Clear entire line and return to start
 				sysMsg := "session has ended"
 				_ = c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
-				updateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
+				contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 				os.Exit(0)
 			} else if input == ">>sigint" || input == ">>eof" {
 				if rl != nil { rl.Close() }
 				fmt.Printf("\r\033[2K\r")
 				sysMsg := "session ended abruptly"
 				_ = c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
-				updateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
+				contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 				fmt.Println("\033[31m> session terminated abruptly.\033[0m")
 				os.Exit(0)
 			}
@@ -300,7 +299,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 					})
 				}
 				
-				newEpisodes, err := consolidation.Consolidate(c.HistoryMgr, activeEps)
+				newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, activeEps)
 				if err != nil {
 					fmt.Fprintf(c.OutWriter, "system: error: consolidation failed: %v\n", err)
 				} else {
@@ -398,7 +397,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 
 			// Throttle: Only invoke reactor if character threshold is met
 			c.UnreactedChars += len(input)
-			if c.UnreactedChars >= reactorCharThreshold {
+			if c.UnreactedChars >= utils.Config.ReactorCharThreshold {
 				if respState, err := c.ReactorAgent.React(ctx, c.ReactorSTM.Get()); err == nil {
 					newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.UserAttention, respState.Serotonin, respState.Oxytocin, respState.Cortisol)
 					if newMindState != "0.00:0.00:0.00:0.00:0.00" {
@@ -454,7 +453,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 
 				// Throttle: Only invoke reactor if character threshold is met
 				c.UnreactedChars += len(reply)
-				if c.UnreactedChars >= reactorCharThreshold {
+				if c.UnreactedChars >= utils.Config.ReactorCharThreshold {
 					if respState, err := c.ReactorAgent.React(ctx, c.ReactorSTM.Get()); err == nil {
 						newMindState := fmt.Sprintf("%.2f:%.2f:%.2f:%.2f:%.2f", respState.ModelAttention, respState.UserAttention, respState.Serotonin, respState.Oxytocin, respState.Cortisol)
 						if newMindState != "0.00:0.00:0.00:0.00:0.00" {
@@ -502,60 +501,17 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 }
 
 
-func updateSessionCSV(sessionID, mindState string, mentalEnergy float64) {
-	csvPath := utils.ResolvePath(filepath.Join("Context", "conversationHistory", "sessions.csv"))
-	var records [][]string
-	
-	file, err := os.Open(csvPath)
-	if err == nil {
-		reader := csv.NewReader(file)
-		records, _ = reader.ReadAll()
-		file.Close()
-	}
 
-	if len(records) == 0 {
-		records = append(records, []string{"session_id", "mind_state", "mental_energy", "last_active"})
-	}
-
-	updated := false
-	for i := 1; i < len(records); i++ {
-		if len(records[i]) >= 4 && records[i][0] == sessionID {
-			records[i][1] = mindState
-			records[i][2] = fmt.Sprintf("%.2f", mentalEnergy)
-			records[i][3] = time.Now().Format(time.RFC3339)
-			updated = true
-			break
-		}
-	}
-
-	if !updated {
-		records = append(records, []string{
-			sessionID,
-			mindState,
-			fmt.Sprintf("%.2f", mentalEnergy),
-			time.Now().Format(time.RFC3339),
-		})
-	}
-
-	outFile, err := os.Create(csvPath)
-	if err == nil {
-		writer := csv.NewWriter(outFile)
-		writer.WriteAll(records)
-		writer.Flush()
-		outFile.Close()
-	}
-}
-
-// Run starts the interactive chat interface for Lyra.
-func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) {
-	personalityName := os.Getenv("SYSTEM_PERSONALITY_NAME")
+// NewAppCore creates and initializes the application core.
+func NewAppCore(newSession bool, reuseSession string, debugMode bool) (*AppCore, error) {
+	personalityName := utils.Config.SystemPersonalityName
 	if personalityName == "" {
 		personalityName = "simulation" // default fallback
 	}
 
 	// Start Ollama sidecar only if no remote URL is provided
 	var ollamaCmd *exec.Cmd
-	if os.Getenv("EMBEDDING_API_URL") == "" {
+	if utils.Config.EmbeddingAPIURL == "" {
 		binDir := utils.ResolvePath(".bin")
 		ollamaPath := filepath.Join(binDir, "ollama")
 		if _, err := os.Stat(ollamaPath); os.IsNotExist(err) {
@@ -571,8 +527,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 		)
 		
 		if err := ollamaCmd.Start(); err != nil {
-			fmt.Printf("system error: failed to start local embedding engine: %v\n", err)
-			os.Exit(1)
+			return nil, fmt.Errorf("system error: failed to start local embedding engine: %v", err)
 		}
 		defer func() {
 			if ollamaCmd != nil && ollamaCmd.Process != nil {
@@ -584,93 +539,35 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 	// Initialize the responder agent from environment configuration
 	resp, err := responder.NewResponderFromEnv()
 	if err != nil {
-		fmt.Printf("system error: failed to initialize responder: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("system error: failed to initialize responder: %v", err)
 	}
 
 	// Initialize the reactor agent and its threshold
 	reactorAgent := reactor.NewReactorAgent()
-	reactorCharThreshold := utils.Config.ReactorCharThreshold
 
 	// ── Reactor STM ──────────────────────────────────────────────────────────
 	reactorMaxChars := utils.Config.MaxWorkingMemoryChars
-	reactorSTM := consolidator.NewSTMmanager(reactorMaxChars)
+	reactorSTM := contextManager.NewShortTermContext(reactorMaxChars)
 
 	// ── Responder STM ────────────────────────────────────────────────────────
 	responderMaxChars := utils.Config.ResponderSTMChars
 	//note: interfacememory(stm) initialsed for responder.
-	responderSTM := consolidator.NewSTMmanager(responderMaxChars)
+	responderSTM := contextManager.NewShortTermContext(responderMaxChars)
 
 	// ── Episode Memory Manager ────────────────────────────────────────────────
 	// SYSTEM_EPISODE_MEMORY_CHARS controls the runtime episode pool's character budget (default 2000).
 	episodeMgr := episode_memory.LoadEpisodeMemoryManagerFromEnv()
 
-	// ── Character Limits ──────────────────────────────────────────────────────
-	maxInputChars := 200
-	if limitStr := os.Getenv("SYSTEM_MAX_INPUT_CHARS"); limitStr != "" {
-		if _, err := fmt.Sscanf(limitStr, "%d", &maxInputChars); err != nil || maxInputChars <= 0 {
-			maxInputChars = 200
-		}
-	}
-	
-	maxOutputChars := 200
-	if limitStr := os.Getenv("SYSTEM_MAX_OUTPUT_CHARS"); limitStr != "" {
-		if _, err := fmt.Sscanf(limitStr, "%d", &maxOutputChars); err != nil || maxOutputChars <= 0 {
-			maxOutputChars = 200
-		}
-	}
+	maxInputChars := utils.Config.SystemMaxInputChars
+	maxOutputChars := utils.Config.SystemMaxOutputChars
 
-	// todo: move this logic to contextManager.
 	// ── Session Resolution ───────────────────────────────────────────────────
-	historyDir := utils.ResolvePath(filepath.Join("Context", "conversationHistory"))
-	os.MkdirAll(historyDir, 0755)
-	
-	csvPath := historyDir + "/sessions.csv"
-	var sessionID string
-	var savedMindState string
-	var savedMentalEnergy float64 = 800.0
-
-	if newSession {
-		sessionID = "" // HistoryManager will generate a new one
-	} else if reuseSession != "" {
-		sessionID = reuseSession
-		// Try to read existing state from CSV
-		file, err := os.Open(csvPath)
-		if err == nil {
-			reader := csv.NewReader(file)
-			records, _ := reader.ReadAll()
-			for i := len(records) - 1; i >= 1; i-- {
-				if len(records[i]) >= 3 && records[i][0] == sessionID {
-					savedMindState = records[i][1]
-					fmt.Sscanf(records[i][2], "%f", &savedMentalEnergy)
-					break
-				}
-			}
-			file.Close()
-		}
-	} else {
-		// Attempt to read the most recent session from CSV
-		file, err := os.Open(csvPath)
-		if err == nil {
-			reader := csv.NewReader(file)
-			records, _ := reader.ReadAll()
-			if len(records) > 1 {
-				lastRow := records[len(records)-1]
-				if len(lastRow) >= 3 {
-					sessionID = lastRow[0]
-					savedMindState = lastRow[1]
-					fmt.Sscanf(lastRow[2], "%f", &savedMentalEnergy)
-				}
-			}
-			file.Close()
-		}
-	}
+	sessionID, savedMindState, savedMentalEnergy := contextManager.ResolveSession(newSession, reuseSession)
 
 	// Initialize long-term conversation history store
-	historyMgr, err := consolidator.NewHistoryManager(sessionID)
+	historyMgr, err := contextManager.NewEventLogContext(sessionID)
 	if err != nil {
-		fmt.Printf("system error: failed to initialize history manager: %v\n", err)
-		os.Exit(1)
+		return nil, fmt.Errorf("system error: failed to initialize history manager: %v", err)
 	}
 
 
@@ -694,7 +591,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 	}
 
 	// Save the resolved session ID and mindstate back to the CSV ledger
-	updateSessionCSV(historyMgr.SessionID, core.GetMindState(), savedMentalEnergy)
+	contextManager.UpdateSessionCSV(historyMgr.SessionID, core.GetMindState(), savedMentalEnergy)
 
 	// Restore state if messages were loaded
 	loadedMessages := historyMgr.GetMessages()
@@ -726,7 +623,19 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 	sched.Engine.SetSleepMode(2) // Default to Hibernation
 	go sched.Run(context.Background())
 
+	return core, nil
+}
+
+// Run starts the interactive chat interface for Lyra.
+func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) {
+	core, err := NewAppCore(newSession, reuseSession, debugMode)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
 	// Initialize Readline
+	historyDir := utils.ResolvePath(filepath.Join("Context", "interfaceEventLog"))
 	var outWriter io.Writer = os.Stdout
 	var rl readliner
 	inputChan := make(chan string)
@@ -775,9 +684,9 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 	lastWakeTime := time.Now()
 
 	// Start API server
-	go api.StartServer(apiInputChan, historyMgr, sched, core.GetMindState)
+	go api.StartServer(apiInputChan, core.HistoryMgr, core.Sched, core.GetMindState)
 
 	core.OutWriter = outWriter
 	core.InputQueue = processChan
-	core.RunLoop(engineStartTime, lastWakeTime, rl, reactorCharThreshold)
+	core.RunLoop(engineStartTime, lastWakeTime, rl)
 }

@@ -8,9 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"msrpengine/src/consolidator"
-	"msrpengine/src/embedder"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/idle_methods/episode_memory"
 	"msrpengine/src/prompts"
 	"msrpengine/src/agents/summariser"
@@ -22,7 +20,7 @@ import (
 // Introspect reads the conversation history, searches for high negative emotion interactions,
 // checks if they are semantically related to the current context, and if so,
 // generates a behavioral strategy fact and saves it to chromem-go.
-func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.EpisodeMemoryManager) error {
+func Introspect(hm *contextManager.EventLogContext, episodeMgr *episode_memory.EpisodeMemoryManager) error {
 	messages := hm.GetMessages()
 	if len(messages) == 0 {
 		return fmt.Errorf("no conversation history to introspect")
@@ -53,7 +51,7 @@ func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.Epis
 	// 2. Semantic Filter: Check if targetMsg is semantically related to current active facts
 	activeEps := episodeMgr.GetActive()
 	if len(activeEps) > 0 {
-		emb := embedder.NewLocalEmbedder()
+		emb := contextManager.NewLocalEmbedder()
 		msgEmb, err := emb.Embed(context.Background(), targetMsg.Content)
 		if err == nil {
 			var maxSim float64
@@ -61,7 +59,7 @@ func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.Epis
 				for _, fact := range ep.Facts {
 					factEmb, err := emb.Embed(context.Background(), fact)
 					if err == nil {
-						sim := embedder.CosineSimilarity(msgEmb, factEmb)
+						sim := contextManager.CosineSimilarity(msgEmb, factEmb)
 						if sim > maxSim {
 							maxSim = sim
 						}
@@ -119,7 +117,7 @@ func Introspect(hm *consolidator.HistoryManager, episodeMgr *episode_memory.Epis
 		return fmt.Errorf("failed to init chromem db: %w", err)
 	}
 	
-	emb := embedder.NewLocalEmbedder()
+	emb := contextManager.NewLocalEmbedder()
 	collection, err := db.GetOrCreateCollection("facts", nil, emb.AsChromemEmbeddingFunc())
 	if err != nil {
 		return fmt.Errorf("failed to get chromem collection: %w", err)

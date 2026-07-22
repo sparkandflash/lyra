@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	"msrpengine/src/agents"
-	"msrpengine/src/consolidator"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/prompts"
 	"msrpengine/src/utils"
 )
@@ -51,7 +51,7 @@ func NewReactorAgent() *ReactorAgent {
 }
 
 // React decides the mindstate scores based on the conversation history.
-func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message) (ReactorResponse, error) {
+func (r *ReactorAgent) React(ctx context.Context, history []contextManager.InterfaceEvent) (ReactorResponse, error) {
 	if len(history) == 0 {
 		return ReactorResponse{ModelAttention: 0.1, UserAttention: 0.7, Serotonin: 0.1, Oxytocin: 0.1, Cortisol: 0.1}, nil
 	}
@@ -128,7 +128,7 @@ func (r *ReactorAgent) React(ctx context.Context, history []consolidator.Message
 }
 
 // reactMock analyzes keywords and message lengths to simulate dynamic mindstate scores offline.
-func (r *ReactorAgent) reactMock(history []consolidator.Message) (ReactorResponse, error) {
+func (r *ReactorAgent) reactMock(history []contextManager.InterfaceEvent) (ReactorResponse, error) {
 	// Initialize default state
 	resp := ReactorResponse{
 		ModelAttention: 0.1,

@@ -1,12 +1,13 @@
 package consolidation
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 
-	"msrpengine/src/consolidator"
+	"msrpengine/src/contextManager"
 )
 
 func TestCalculateActivationScore(t *testing.T) {
@@ -28,13 +29,13 @@ func TestCalculateActivationScore(t *testing.T) {
 
 func TestConsolidationFlow(t *testing.T) {
 	// Setup HistoryManager
-	hm, err := consolidator.NewHistoryManager("")
+	hm, err := contextManager.NewEventLogContext("")
 	if err != nil {
 		t.Fatalf("failed to create HistoryManager: %v", err)
 	}
 
 	// Setup cleanups
-	historyDir := filepath.Join("Context", "conversationHistory")
+	historyDir := filepath.Join("Context", "interfaceEventLog")
 	defer os.RemoveAll("Context") // recursively delete Context folder in test
 
 	historyFile := filepath.Join(historyDir, hm.SessionID+".json")
@@ -53,7 +54,7 @@ func TestConsolidationFlow(t *testing.T) {
 	os.Setenv("SYSTEM_MAX_WORKING_MEMORY_CHARS", "100")
 	defer os.Unsetenv("SYSTEM_MAX_WORKING_MEMORY_CHARS")
 
-	newEpisodes, err := Consolidate(hm, nil)
+	newEpisodes, err := Consolidate(context.Background(), hm, nil)
 	if err != nil {
 		t.Fatalf("consolidation failed: %v", err)
 	}
@@ -75,7 +76,7 @@ func TestConsolidationFlow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to read history file: %v", err)
 	}
-	var histMsgs []consolidator.Message
+	var histMsgs []contextManager.InterfaceEvent
 	if err := json.Unmarshal(histData, &histMsgs); err != nil {
 		t.Fatalf("failed to parse history log: %v", err)
 	}

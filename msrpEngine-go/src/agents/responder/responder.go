@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"msrpengine/src/agents"
-	"msrpengine/src/consolidator"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/prompts"
 	"msrpengine/src/utils"
 )
@@ -46,16 +46,16 @@ func NewResponderFromEnv() (*Responder, error) {
 	}, nil
 }
 
-func (r *Responder) Respond(ctx context.Context, prompt string, mindState string, history []consolidator.Message, episodes []EpisodeSummary) (string, string, error) {
+func (r *Responder) Respond(ctx context.Context, prompt string, mindState string, history []contextManager.InterfaceEvent, episodes []EpisodeSummary) (string, string, error) {
 	return r.respondInternal(ctx, prompt, mindState, history, episodes, r.agent.SystemPrompt)
 }
 
-func (r *Responder) RespondProactive(ctx context.Context, mindState string, history []consolidator.Message, episodes []EpisodeSummary) (string, string, error) {
+func (r *Responder) RespondProactive(ctx context.Context, mindState string, history []contextManager.InterfaceEvent, episodes []EpisodeSummary) (string, string, error) {
 	systemPrompt := prompts.GetProactivePrompt()
 	return r.respondInternal(ctx, "[System: The user has been silent. Initiate conversation.]", mindState, history, episodes, systemPrompt)
 }
 
-func (r *Responder) respondInternal(ctx context.Context, prompt string, mindState string, history []consolidator.Message, episodes []EpisodeSummary, systemPrompt string) (string, string, error) {
+func (r *Responder) respondInternal(ctx context.Context, prompt string, mindState string, history []contextManager.InterfaceEvent, episodes []EpisodeSummary, systemPrompt string) (string, string, error) {
 
 	userPayload := map[string]interface{}{
 		"message":   prompt,

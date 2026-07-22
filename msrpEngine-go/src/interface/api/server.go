@@ -11,7 +11,7 @@ import (
 
 	"github.com/golang-jwt/jwt/v5"
 
-	"msrpengine/src/consolidator"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/escalator"
 )
 
@@ -33,13 +33,13 @@ type ChatInput struct {
 // Server handles the web API.
 type Server struct {
 	InputChan     chan<- ChatInput
-	HistoryMgr    *consolidator.HistoryManager
+	HistoryMgr    *contextManager.EventLogContext
 	Sched         *escalator.Scheduler
 	MindStateFunc func() string
 }
 
 // StartServer initializes and starts the HTTP server on port 8080.
-func StartServer(inputChan chan<- ChatInput, historyMgr *consolidator.HistoryManager, sched *escalator.Scheduler, msFunc func() string) {
+func StartServer(inputChan chan<- ChatInput, historyMgr *contextManager.EventLogContext, sched *escalator.Scheduler, msFunc func() string) {
 	s := &Server{
 		InputChan:     inputChan,
 		HistoryMgr:    historyMgr,
@@ -174,7 +174,7 @@ func (s *Server) handleGetMessages(w http.ResponseWriter, r *http.Request) {
 	lastID := r.URL.Query().Get("last_id")
 	allMsgs := s.HistoryMgr.GetMessages()
 	
-	var newMsgs []consolidator.Message
+	var newMsgs []contextManager.InterfaceEvent
 	for _, msg := range allMsgs {
 		if lastID == "" || msg.ID > lastID {
 			newMsgs = append(newMsgs, msg)
@@ -268,11 +268,11 @@ func (s *Server) handleGetMessageHistory(w http.ResponseWriter, r *http.Request)
 		end = len(allMsgs)
 	}
 	
-	var paginatedMsgs []consolidator.Message
+	var paginatedMsgs []contextManager.InterfaceEvent
 	if offset < end {
 		paginatedMsgs = allMsgs[offset:end]
 	} else {
-		paginatedMsgs = []consolidator.Message{}
+		paginatedMsgs = []contextManager.InterfaceEvent{}
 	}
 	
 	w.Header().Set("Content-Type", "application/json")

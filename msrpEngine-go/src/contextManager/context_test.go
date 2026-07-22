@@ -1,4 +1,4 @@
-package consolidator
+package contextManager
 
 import (
 	"encoding/json"
@@ -9,7 +9,7 @@ import (
 
 func TestSTMmanagerCapping(t *testing.T) {
 	// Setup STM with a small character limit of 10
-	stm := NewSTMmanager(10)
+	stm := NewShortTermContext(10)
 
 	// Add a message of 6 characters: "hello!"
 	stm.Update("user", "hello!")
@@ -40,13 +40,13 @@ func TestSTMmanagerCapping(t *testing.T) {
 
 func TestHistoryManager(t *testing.T) {
 	// Test NewHistoryManager
-	hm, err := NewHistoryManager("")
+	hm, err := NewEventLogContext("")
 	if err != nil {
-		t.Fatalf("failed to initialize HistoryManager: %v", err)
+		t.Fatalf("failed to initialize HistoryContext: %v", err)
 	}
 
 	// Verify directory and file creation
-	dir := filepath.Join("Context", "conversationHistory")
+	dir := filepath.Join("Context", "interfaceEventLog")
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
 		t.Fatalf("history directory was not created")
 	}
@@ -73,7 +73,7 @@ func TestHistoryManager(t *testing.T) {
 		t.Fatalf("failed to read written history file: %v", err)
 	}
 
-	var msgs []Message
+	var msgs []InterfaceEvent
 	err = json.Unmarshal(data, &msgs)
 	if err != nil {
 		t.Fatalf("failed to parse logged history JSON: %v", err)

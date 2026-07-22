@@ -53,11 +53,13 @@ type AppConfig struct {
 	TempSleepDelayMins    int
 
 	// Character Limits
-	SystemPromptCharLimit int
-	ResponderMasterLimit  int
-	ReactorMasterLimit    int
-	SummariserMasterLimit int
+	SystemPromptCharLimit  int
+	ResponderMasterLimit   int
+	ReactorMasterLimit     int
+	SummariserMasterLimit  int
 	EmbeddingMaxInputLimit int
+	SystemMaxInputChars    int
+	SystemMaxOutputChars   int
 
 	// Web API
 	Port      int
@@ -119,6 +121,8 @@ func init() {
 		ReactorMasterLimit:     getEnvAsInt("SYSTEM_REACTOR_MASTER_LIMIT", 5000),
 		SummariserMasterLimit:  getEnvAsInt("SYSTEM_SUMMARISER_MASTER_LIMIT", 16000),
 		EmbeddingMaxInputLimit: getEnvAsInt("EMBEDDING_MAX_INPUT_LIMIT", 32000),
+		SystemMaxInputChars:    getEnvAsInt("SYSTEM_MAX_INPUT_CHARS", 200),
+		SystemMaxOutputChars:   getEnvAsInt("SYSTEM_MAX_OUTPUT_CHARS", 200),
 
 		Port:      getEnvAsInt("PORT", 8080),
 		WebUser:   getEnv("WEB_USER", ""),

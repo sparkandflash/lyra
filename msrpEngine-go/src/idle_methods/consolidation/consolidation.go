@@ -8,9 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"msrpengine/src/consolidator"
-	"msrpengine/src/embedder"
+	"msrpengine/src/contextManager"
 	"msrpengine/src/agents/summariser"
 	"msrpengine/src/utils"
 
@@ -42,7 +40,7 @@ type EpisodeSummary struct {
 // Consolidate reads unsaved messages from history, groups them by character length,
 // calls the summariser agent to generate metadata, saves them to episode JSON/CSV files,
 // and returns the newly created episode summaries for the runtime memory manager.
-func Consolidate(hm *consolidator.HistoryManager, activeEps []EpisodeSummary) ([]EpisodeSummary, error) {
+func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, activeEps []EpisodeSummary) ([]EpisodeSummary, error) {
 	messages := hm.GetMessages()
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("no conversation history to consolidate")
@@ -161,7 +159,7 @@ func Consolidate(hm *consolidator.HistoryManager, activeEps []EpisodeSummary) ([
 			return nil, fmt.Errorf("failed to init chromem db: %w", err)
 		}
 		
-		emb := embedder.NewLocalEmbedder()
+		emb := contextManager.NewLocalEmbedder()
 		collection, err := db.GetOrCreateCollection("facts", nil, emb.AsChromemEmbeddingFunc())
 		if err != nil {
 			return nil, fmt.Errorf("failed to get chromem collection: %w", err)
