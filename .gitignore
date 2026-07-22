@@ -18,6 +18,7 @@ analysis/*.png
 *.csv
 
 # Built Binaries
+msrpEngine-go/msrpengine
 msrpEngine-go/terminal-app
 msrpEngine-go/test_app
 msrpEngine-go/clyde_meyers
