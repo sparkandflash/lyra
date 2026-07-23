@@ -26,7 +26,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 		<-sigChan
 		// If we receive a kill signal, save state and exit directly
 		sysMsg := "session ended abruptly"
-		c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
+		c.HistoryMgr.Save("system", sysMsg, c.GetCurrentMetrics())
 		contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 		c.Shutdown()
 		os.Exit(0)
@@ -37,6 +37,13 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 		case evt := <-c.Sched.EventChan:
 			switch evt {
 			case escalator.EventConsolidate:
+				if !c.StartConsolidation() {
+					if c.DebugMode {
+						fmt.Fprintf(c.OutWriter, "[DEBUG] Consolidation skipped (already running)\n")
+					}
+					continue
+				}
+
 				sysMsg := "[System: Memory consolidation triggered]"
 				if c.DebugMode {
 					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
@@ -51,17 +58,33 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 						PeakMindState: e.PeakMindState,
 					})
 				}
-				newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, activeEps)
-				if err == nil {
-					for _, ep := range newEpisodes {
-						c.EpisodeMgr.Push(episode_memory.EpisodeSummary{
-							ID:            ep.ID,
-							Facts:         ep.Facts,
-							PeakMindState: ep.PeakMindState,
-						})
+
+				go func(eps []consolidation.EpisodeSummary) {
+					defer c.FinishConsolidation()
+					newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, c.IndexMgr, eps)
+					if err == nil {
+						for _, ep := range newEpisodes {
+							c.EpisodeMgr.Push(episode_memory.EpisodeSummary{
+								ID:            ep.ID,
+								Facts:         ep.Facts,
+								PeakMindState: ep.PeakMindState,
+							})
+						}
+						c.SetUnconsolidated(false)
+						c.ResetUnconsolidatedChars()
+						if c.DebugMode {
+							fmt.Fprintf(c.OutWriter, "\n[DEBUG] Background consolidation complete.\n> ")
+						}
+					} else if strings.Contains(err.Error(), "no new messages to consolidate") || strings.Contains(err.Error(), "no conversation history") {
+						// We are out of sync (character count is > 0 but no messages exist to store). Reset counters safely.
+						c.SetUnconsolidated(false)
+						c.ResetUnconsolidatedChars()
+					} else {
+						if c.DebugMode {
+							fmt.Fprintf(c.OutWriter, "\n[DEBUG] Background consolidation failed: %v\n> ", err)
+						}
 					}
-					c.SetUnconsolidated(false)
-				}
+				}(activeEps)
 			case escalator.EventEnterTempSleep:
 				sysMsg := "[System: User has disconnected from the interface.]"
 				if c.DebugMode {
@@ -139,7 +162,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 						}
 					}
 
-					_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetMindState())
+					_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetCurrentMetrics())
 
 					// Background: Reactor update
 					// Save assistant's turn locally (Responder uses its own STM logic)
@@ -183,7 +206,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 				fmt.Printf("\r\033[2K\r") // Clear entire line and return to start
 				sysMsg := "session has ended"
-				_ = c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
+				_ = c.HistoryMgr.Save("system", sysMsg, c.GetCurrentMetrics())
 				contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 				c.Shutdown()
 				os.Exit(0)
@@ -193,7 +216,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 				fmt.Printf("\r\033[2K\r")
 				sysMsg := "session ended abruptly"
-				_ = c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
+				_ = c.HistoryMgr.Save("system", sysMsg, c.GetCurrentMetrics())
 				contextManager.UpdateSessionCSV(c.HistoryMgr.SessionID, c.GetMindState(), c.Sched.Engine.GetMentalEnergy())
 				fmt.Println("\033[31m> session terminated abruptly.\033[0m")
 				c.Shutdown()
@@ -205,9 +228,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				lastWakeTime = time.Now()
 				sysMsg := fmt.Sprintf("[System: you just woke up from sleep. The current time is %s]", time.Now().Format("Monday, Jan 2, 3:04 PM"))
 				c.InjectSystemMessage(sysMsg)
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
 			}
 
 			if input == "" {
@@ -233,6 +254,14 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 				continue
 			} else if input == ">>consolidate" {
+				if !c.StartConsolidation() {
+					fmt.Fprintf(c.OutWriter, "system: warning: consolidation is already running in the background.\n")
+					continue
+				}
+
+				fmt.Fprintf(c.OutWriter, "system: consolidation started in the background...\n")
+
+				// Copy active episodes so we don't hold the lock or iterate while another thread modifies
 				var activeEps []consolidation.EpisodeSummary
 				for _, e := range c.EpisodeMgr.GetActive() {
 					activeEps = append(activeEps, consolidation.EpisodeSummary{
@@ -242,20 +271,25 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 					})
 				}
 
-				newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, activeEps)
-				if err != nil {
-					fmt.Fprintf(c.OutWriter, "system: error: consolidation failed: %v\n", err)
-				} else {
-					for _, ep := range newEpisodes {
-						c.EpisodeMgr.Push(episode_memory.EpisodeSummary{
-							ID:            ep.ID,
-							Facts:         ep.Facts,
-							PeakMindState: ep.PeakMindState,
-						})
+				go func(eps []consolidation.EpisodeSummary) {
+					defer c.FinishConsolidation()
+					newEpisodes, err := consolidation.Consolidate(context.Background(), c.HistoryMgr, c.IndexMgr, eps)
+					if err != nil {
+						fmt.Fprintf(c.OutWriter, "\nsystem: error: background consolidation failed: %v\n> ", err)
+					} else {
+						for _, ep := range newEpisodes {
+							c.EpisodeMgr.Push(episode_memory.EpisodeSummary{
+								ID:            ep.ID,
+								Facts:         ep.Facts,
+								PeakMindState: ep.PeakMindState,
+							})
+						}
+						c.SetUnconsolidated(false)
+						c.ResetUnconsolidatedChars()
+						fmt.Fprintf(c.OutWriter, "\nsystem: background consolidation completed successfully. %d episode(s) added.\n> ", len(newEpisodes))
 					}
-					c.SetUnconsolidated(false)
-					fmt.Fprintf(c.OutWriter, "system: consolidation completed successfully. %d episode(s) added.\n", len(newEpisodes))
-				}
+				}(activeEps)
+				
 				continue
 			} else if input == ">>reflect" {
 				activeEps := c.EpisodeMgr.GetActive()
@@ -302,7 +336,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 			}()
 
 			// Save user message to long-term history
-			_ = c.HistoryMgr.Save("user", input, c.GetMindState())
+			_ = c.HistoryMgr.Save("user", input, c.GetCurrentMetrics())
 
 			// Update both STMs
 			c.ReactorSTM.Update("user", input)
@@ -333,7 +367,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 
 				fmt.Fprintf(c.OutWriter, "\033[34m> %s\033[0m\n", reply)
-				_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetMindState())
+				_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetCurrentMetrics())
 				c.ResponderSTM.Update("assistant", reply)
 				c.ReactorSTM.Update("assistant", reply)
 				c.SetUnconsolidated(true)
@@ -427,7 +461,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				done <- true
 
 				// Save assistant response to long-term history and responder STM
-				_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetMindState())
+				_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetCurrentMetrics())
 				c.ResponderSTM.Update("assistant", reply)
 				c.ReactorSTM.Update("assistant", reply)
 				c.SetUnconsolidated(true)

@@ -21,6 +21,7 @@ import (
 
 type AppCore struct {
 	HistoryMgr      *contextManager.EventLogContext
+	IndexMgr        *contextManager.ChromemIndexManager
 	EpisodeMgr      *episode_memory.EpisodeMemoryManager
 	ReactorSTM      *contextManager.ShortTermContext
 	ResponderSTM    *contextManager.ShortTermContext
@@ -32,6 +33,7 @@ type AppCore struct {
 	MindStateVal         string
 	HasUnconsolidatedVal bool
 	UnconsolidatedChars  int
+	isConsolidating      bool
 	StateMu              sync.RWMutex
 	
 	DebugMode       bool
@@ -88,8 +90,39 @@ func (c *AppCore) ResetUnconsolidatedChars() {
 	c.UnconsolidatedChars = 0
 }
 
+func (c *AppCore) StartConsolidation() bool {
+	c.StateMu.Lock()
+	defer c.StateMu.Unlock()
+	if c.isConsolidating {
+		return false
+	}
+	c.isConsolidating = true
+	return true
+}
+
+func (c *AppCore) FinishConsolidation() {
+	c.StateMu.Lock()
+	defer c.StateMu.Unlock()
+	c.isConsolidating = false
+}
+
+func (c *AppCore) GetCurrentMetrics() contextManager.Metrics {
+	if c.Sched == nil || c.Sched.Engine == nil {
+		return contextManager.Metrics{
+			EnergyLevel:     800.0,
+			EnergyDrainRate: 10.0,
+			MindScores:      c.GetMindState(),
+		}
+	}
+	return contextManager.Metrics{
+		EnergyLevel:     c.Sched.Engine.GetMentalEnergy(),
+		EnergyDrainRate: c.Sched.Engine.GetEnergyDrainRate(),
+		MindScores:      c.GetMindState(),
+	}
+}
+
 func (c *AppCore) InjectSystemMessage(sysMsg string) {
-	_ = c.HistoryMgr.Save("system", sysMsg, c.GetMindState())
+	_ = c.HistoryMgr.Save("system", sysMsg, c.GetCurrentMetrics())
 	c.ReactorSTM.Update("system", sysMsg)
 	c.ResponderSTM.Update("system", sysMsg)
 }
@@ -106,6 +139,8 @@ func (c *AppCore) Shutdown() {
 type readliner interface {
 	Close() error
 	Stdout() io.Writer
+	SetPrompt(string)
+	Refresh()
 }
 
 // Run starts the interactive chat interface for Lyra.

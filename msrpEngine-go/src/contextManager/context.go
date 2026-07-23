@@ -11,13 +11,18 @@ import (
 	"msrpengine/src/utils"
 )
 
-// Message represents a single chat turn with an ID, role, content, mindstate, and stored flag.
+type Metrics struct {
+	EnergyLevel     float64 `json:"energy_level"`
+	EnergyDrainRate float64 `json:"energy_drain_rate"`
+	MindScores      string  `json:"mind_scores"`
+}
+
+// Message represents a single chat turn with an ID, role, content, and metrics.
 type InterfaceEvent struct {
-	ID        string `json:"id"`
-	Author    string `json:"author"`
-	Content   string `json:"content"`
-	MindState string `json:"mindstate,omitempty"`
-	Stored    bool   `json:"stored"`
+	ID      string  `json:"id"`
+	Author  string  `json:"author"`
+	Content string  `json:"content"`
+	Metrics Metrics `json:"metrics,omitempty"`
 }
 
 // ShortTermContext manages the rolling short term memory of the chat.
@@ -131,13 +136,13 @@ func NewEventLogContext(sessionID string) (*EventLogContext, error) {
 }
 
 // Save appends a new message to the persistent history and writes the full log to disk.
-func (h *EventLogContext) Save(role string, content string, mindState string) error {
+func (h *EventLogContext) Save(role string, content string, metrics Metrics) error {
 	msgID := fmt.Sprintf("msg_%d", time.Now().UnixNano())
 	
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	h.messages = append(h.messages, InterfaceEvent{ID: msgID, Author: role, Content: content, MindState: mindState, Stored: false})
+	h.messages = append(h.messages, InterfaceEvent{ID: msgID, Author: role, Content: content, Metrics: metrics})
 
 	data, err := json.MarshalIndent(h.messages, "", "  ")
 	if err != nil {
@@ -160,26 +165,3 @@ func (h *EventLogContext) GetMessages() []InterfaceEvent {
 	return cp
 }
 
-// MarkStored flags messages in the range [start, end) as stored and writes the updated array back to disk.
-func (h *EventLogContext) MarkStored(start, end int) error {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
-	if start < 0 || end > len(h.messages) || start > end {
-		return fmt.Errorf("invalid range: [%d, %d)", start, end)
-	}
-	for i := start; i < end; i++ {
-		h.messages[i].Stored = true
-	}
-
-	data, err := json.MarshalIndent(h.messages, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize history: %w", err)
-	}
-
-	if err := os.WriteFile(h.filePath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write history to disk: %w", err)
-	}
-
-	return nil
-}

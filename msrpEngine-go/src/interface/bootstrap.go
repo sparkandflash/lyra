@@ -50,6 +50,11 @@ func NewAppCore(newSession bool, reuseSession string, debugMode bool) (*AppCore,
 		return nil, fmt.Errorf("system error: failed to initialize responder: %v", err)
 	}
 
+	indexMgr, err := contextManager.NewChromemIndexManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to init index manager: %w", err)
+	}
+
 	// Initialize the reactor agent and its threshold
 	reactorAgent := reactor.NewReactorAgent()
 
@@ -62,8 +67,6 @@ func NewAppCore(newSession bool, reuseSession string, debugMode bool) (*AppCore,
 	//note: interfacememory(stm) initialsed for responder.
 	responderSTM := contextManager.NewShortTermContext(responderMaxChars)
 
-	// ── Episode Memory Manager ────────────────────────────────────────────────
-	// SYSTEM_EPISODE_MEMORY_CHARS controls the runtime episode pool's character budget (default 2000).
 	episodeMgr := episode_memory.LoadEpisodeMemoryManagerFromEnv()
 
 	maxInputChars := utils.Config.SystemMaxInputChars
@@ -78,9 +81,9 @@ func NewAppCore(newSession bool, reuseSession string, debugMode bool) (*AppCore,
 		return nil, fmt.Errorf("system error: failed to initialize history manager: %v", err)
 	}
 
-	// Instantiate AppCore early to serve as the single source of truth for state
 	core := &AppCore{
 		HistoryMgr:      historyMgr,
+		IndexMgr:        indexMgr,
 		EpisodeMgr:      episodeMgr,
 		ReactorSTM:      reactorSTM,
 		ResponderSTM:    responderSTM,
@@ -111,8 +114,8 @@ func NewAppCore(newSession bool, reuseSession string, debugMode bool) (*AppCore,
 
 		// If mindstate wasn't loaded from the file (e.g. --session used), fallback to last message
 		if savedMindState == "" {
-			if lastMsg := loadedMessages[len(loadedMessages)-1]; lastMsg.MindState != "" {
-				core.SetMindState(lastMsg.MindState)
+			if lastMsg := loadedMessages[len(loadedMessages)-1]; lastMsg.Metrics.MindScores != "" {
+				core.SetMindState(lastMsg.Metrics.MindScores)
 			}
 		}
 

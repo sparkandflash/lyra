@@ -33,7 +33,7 @@ rules:
     priority: 8
 
   - name: "TempSleepConsolidate"
-    condition: "CurrentSleepMode == 1 && HasUnconsolidatedMessages"
+    condition: "CurrentSleepMode == 1 && HasUnconsolidatedMessages && TimeSinceConsolidationMins >= 1.0"
     action: "CONSOLIDATE"
     priority: 7
 

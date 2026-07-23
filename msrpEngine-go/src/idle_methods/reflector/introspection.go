@@ -30,8 +30,8 @@ func Introspect(hm *contextManager.EventLogContext, episodeMgr *episode_memory.E
 	// 1. Context Filtering: Scan history for high Negative Emotion (NE)
 	for i := len(messages) - 1; i >= 0; i-- {
 		msg := messages[i]
-		if msg.MindState != "" {
-			parts := strings.Split(msg.MindState, ":")
+		if msg.Metrics.MindScores != "" {
+			parts := strings.Split(msg.Metrics.MindScores, ":")
 			if len(parts) >= 5 {
 				ne, err := strconv.ParseFloat(parts[4], 64) // Cortisol
 				if err == nil && ne > 0.6 {

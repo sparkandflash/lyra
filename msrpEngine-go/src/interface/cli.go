@@ -12,6 +12,8 @@ type readlinerImpl interface {
 	Close() error
 	Readline() (string, error)
 	Stdout() io.Writer
+	SetPrompt(string)
+	Refresh()
 }
 
 func StartCLI(historyDir string, inputChan chan<- string) (readlinerImpl, error) {

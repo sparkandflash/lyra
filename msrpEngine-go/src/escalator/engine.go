@@ -77,6 +77,7 @@ type CompiledRule struct {
 
 func NewRuleEngine() RuleEngine {
 	now := time.Now()
+	
 	engine := &DefaultRuleEngine{
 		Heartrate:              70.0,
 		MentalEnergy:           800.0,

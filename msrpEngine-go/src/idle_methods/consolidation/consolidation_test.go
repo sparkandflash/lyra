@@ -2,9 +2,7 @@ package consolidation
 
 import (
 	"context"
-	"encoding/json"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"msrpengine/src/contextManager"
@@ -35,17 +33,23 @@ func TestConsolidationFlow(t *testing.T) {
 	}
 
 	// Setup cleanups
-	historyDir := filepath.Join("Context", "interfaceEventLog")
 	defer os.RemoveAll("Context") // recursively delete Context folder in test
 
-	historyFile := filepath.Join(historyDir, hm.SessionID+".json")
 
+	// Setup IndexManager
+	idxMgr, err := contextManager.NewChromemIndexManager()
+	if err != nil {
+		t.Fatalf("failed to create IndexManager: %v", err)
+	}
+
+	metrics1 := contextManager.Metrics{MindScores: "0.90:0.80:0.20:0.70:0.50"}
 	// Save test turns
-	err = hm.Save("user", "ping about skrillex dreams", "0.90:0.80:0.20:0.70:0.50")
+	err = hm.Save("user", "ping about skrillex dreams", metrics1)
 	if err != nil {
 		t.Fatalf("failed to save user turn: %v", err)
 	}
-	err = hm.Save("assistant", "pong with regal tone", "0.90:0.30:0.50:0.70:0.50")
+	metrics2 := contextManager.Metrics{MindScores: "0.90:0.30:0.50:0.70:0.50"}
+	err = hm.Save("assistant", "pong with regal tone", metrics2)
 	if err != nil {
 		t.Fatalf("failed to save assistant turn: %v", err)
 	}
@@ -54,7 +58,7 @@ func TestConsolidationFlow(t *testing.T) {
 	os.Setenv("SYSTEM_MAX_WORKING_MEMORY_CHARS", "100")
 	defer os.Unsetenv("SYSTEM_MAX_WORKING_MEMORY_CHARS")
 
-	newEpisodes, err := Consolidate(context.Background(), hm, nil)
+	newEpisodes, err := Consolidate(context.Background(), hm, idxMgr, nil)
 	if err != nil {
 		t.Fatalf("consolidation failed: %v", err)
 	}
@@ -71,19 +75,11 @@ func TestConsolidationFlow(t *testing.T) {
 		t.Errorf("expected peak mindstate '0.90:0.30:0.50:0.70:0.50', got %q", newEpisodes[0].PeakMindState)
 	}
 
-	// 3. Verify history JSON file messages are updated with stored:true
-	histData, err := os.ReadFile(historyFile)
-	if err != nil {
-		t.Fatalf("failed to read history file: %v", err)
-	}
-	var histMsgs []contextManager.InterfaceEvent
-	if err := json.Unmarshal(histData, &histMsgs); err != nil {
-		t.Fatalf("failed to parse history log: %v", err)
-	}
-
+	// 3. Verify messages are marked as consolidated in the index
+	histMsgs := hm.GetMessages()
 	for _, msg := range histMsgs {
-		if !msg.Stored {
-			t.Errorf("expected all messages to have stored: true, but got: %+v", msg)
+		if !idxMgr.IsMessageConsolidated(msg.ID) {
+			t.Errorf("expected all messages to be marked consolidated, but got: %+v", msg)
 		}
 	}
 }

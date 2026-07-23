@@ -57,10 +57,23 @@ func (r *Responder) RespondProactive(ctx context.Context, mindState string, hist
 
 func (r *Responder) respondInternal(ctx context.Context, prompt string, mindState string, history []contextManager.InterfaceEvent, episodes []EpisodeSummary, systemPrompt string) (string, string, error) {
 
+	// Clean history to remove internal message IDs to prevent LLM confusion
+	type cleanHistory struct {
+		Author  string `json:"author"`
+		Content string `json:"content"`
+	}
+	cleanedHistory := make([]cleanHistory, len(history))
+	for i, h := range history {
+		cleanedHistory[i] = cleanHistory{
+			Author:  h.Author,
+			Content: h.Content,
+		}
+	}
+
 	userPayload := map[string]interface{}{
 		"message":   prompt,
 		"mindstate": mindState,
-		"history":   history,
+		"history":   cleanedHistory,
 		"episodes":  episodes,
 	}
 	payloadBytes, err := json.Marshal(userPayload)

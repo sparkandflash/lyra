@@ -287,7 +287,7 @@ func (e *DefaultRuleEngine) EvaluateState(mindState string, unconsolidatedChars 
 		} else if highestPriorityRule.Action == EventEnterTempSleep {
 			e.CurrentSleepMode = 1
 		}
-		if highestPriorityRule.Action == EventNothing && e.CurrentSleepMode > 0 {
+		if highestPriorityRule.Action == EventNothing && e.CurrentSleepMode == 1 {
 			if env.IdleDurationMins < env.SYSTEM_TEMP_SLEEP_DELAY_MINS {
 				e.CurrentSleepMode = 0
 			}
@@ -295,9 +295,11 @@ func (e *DefaultRuleEngine) EvaluateState(mindState string, unconsolidatedChars 
 		return highestPriorityRule.Action
 	}
 	
-	// Default wake state recovery if idle time falls
+	// Default wake state recovery if idle time falls (only for TempSleep)
 	if env.IdleDurationMins < env.SYSTEM_TEMP_SLEEP_DELAY_MINS {
-		e.CurrentSleepMode = 0
+		if e.CurrentSleepMode == 1 {
+			e.CurrentSleepMode = 0
+		}
 	}
 
 	return EventNothing

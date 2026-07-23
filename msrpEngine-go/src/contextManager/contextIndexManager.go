@@ -101,3 +101,44 @@ func (m *ChromemIndexManager) SearchContext(collectionName string, query string,
 
 	return results, nil
 }
+
+// IsMessageConsolidated checks the vector database for a document in the consolidation_index
+// to determine if a message has already been processed by the consolidation loop.
+func (m *ChromemIndexManager) IsMessageConsolidated(id string) bool {
+	ctx := context.Background()
+	collection := m.db.GetCollection("consolidation_index", nil)
+	if collection == nil {
+		return false
+	}
+	
+	_, err := collection.GetByID(ctx, id)
+	return err == nil
+}
+
+// MarkConsolidated adds the given message IDs to the consolidation_index without embedding them.
+func (m *ChromemIndexManager) MarkConsolidated(ids []string) error {
+	ctx := context.Background()
+	
+	collection, err := m.db.GetOrCreateCollection("consolidation_index", nil, nil)
+	if err != nil {
+		return fmt.Errorf("failed to get/create consolidation index: %w", err)
+	}
+	
+	docs := make([]chromem.Document, len(ids))
+	for i, id := range ids {
+		// Supplying a dummy embedding skips the actual embedding API call, making this instant and offline.
+		docs[i] = chromem.Document{
+			ID:        id,
+			Content:   "true",
+			Embedding: []float32{1.0},
+		}
+	}
+	
+	// Use high concurrency since it's just local memory operations without an API call
+	err = collection.AddDocuments(ctx, docs, 10)
+	if err != nil {
+		return fmt.Errorf("failed to mark messages as consolidated: %w", err)
+	}
+	
+	return nil
+}

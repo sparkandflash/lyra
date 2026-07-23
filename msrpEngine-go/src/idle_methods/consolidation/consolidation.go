@@ -40,7 +40,7 @@ type EpisodeSummary struct {
 // Consolidate reads unsaved messages from history, groups them by character length,
 // calls the summariser agent to generate metadata, saves them to episode JSON/CSV files,
 // and returns the newly created episode summaries for the runtime memory manager.
-func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, activeEps []EpisodeSummary) ([]EpisodeSummary, error) {
+func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, idxMgr *contextManager.ChromemIndexManager, activeEps []EpisodeSummary) ([]EpisodeSummary, error) {
 	messages := hm.GetMessages()
 	if len(messages) == 0 {
 		return nil, fmt.Errorf("no conversation history to consolidate")
@@ -49,7 +49,7 @@ func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, active
 	// Filter indices of unstored messages
 	var unstoredIndices []int
 	for i, msg := range messages {
-		if !msg.Stored {
+		if !idxMgr.IsMessageConsolidated(msg.ID) {
 			unstoredIndices = append(unstoredIndices, i)
 		}
 	}
@@ -125,17 +125,33 @@ func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, active
 			chunkMsgIDs = append(chunkMsgIDs, msg.ID)
 			convBuilder.WriteString(fmt.Sprintf("%s: %s\n", msg.Author, msg.Content))
 
-			activation := calculateActivationScore(msg.MindState)
+			activation := calculateActivationScore(msg.Metrics.MindScores)
 			if activation > maxActivation {
 				maxActivation = activation
-				if msg.MindState != "" {
-					peakMindState = msg.MindState
+				if msg.Metrics.MindScores != "" {
+					peakMindState = msg.Metrics.MindScores
 				}
 			}
 		}
 
-		// Call Summariser agent to get summary JSON
-		rawJSON, err := agent.Summarise(context.Background(), convBuilder.String())
+		// Call Summariser agent to get summary JSON with retry logic for 429 Rate Limits
+		var rawJSON string
+		var err error
+		maxRetries := 3
+		for attempt := 0; attempt < maxRetries; attempt++ {
+			rawJSON, err = agent.Summarise(context.Background(), convBuilder.String())
+			if err == nil {
+				break
+			}
+			if strings.Contains(err.Error(), "429") {
+				if attempt < maxRetries-1 {
+					time.Sleep(time.Duration((attempt+1)*5) * time.Second) // 5s, 10s
+					continue
+				}
+			}
+			break
+		}
+		
 		if err != nil {
 			return nil, fmt.Errorf("failed to generate summary for chunk %d: %w", chunkIdx, err)
 		}
@@ -197,18 +213,28 @@ func Consolidate(ctx context.Context, hm *contextManager.EventLogContext, active
 			// Use 1 concurrency as we are in a background process anyway and want to avoid overwhelming local embedding API
 			if err := collection.AddDocuments(context.Background(), docs, 1); err != nil {
 				if strings.Contains(err.Error(), "429") {
-					// Suppress rate limit errors from Cohere free tier to avoid console spam
-				} else {
-					fmt.Printf("[DEBUG] Failed to add documents to chromem: %v\n", err)
+					return nil, fmt.Errorf("rate limited by embedding API (429), will retry later")
 				}
+				return nil, fmt.Errorf("failed to add documents to chromem: %w", err)
 			}
 		}
 
-		// Mark the messages in HistoryManager as stored on disk
-		startIdx := indices[0]
-		endIdx := indices[len(indices)-1] + 1
-		if err := hm.MarkStored(startIdx, endIdx); err != nil {
-			return nil, fmt.Errorf("failed to mark messages as stored for episode %s: %w", episodeID, err)
+		// Mark the messages in ChromemIndexManager as consolidated
+		if err := idxMgr.MarkConsolidated(chunkMsgIDs); err != nil {
+			return nil, fmt.Errorf("failed to mark messages as consolidated for episode %s: %w", episodeID, err)
+		}
+
+		// Save the episode summary to disk so the runtime memory manager can reload it on boot
+		episodeData := map[string]interface{}{
+			"id":             episodeID,
+			"facts":          llmResp.FactArray,
+			"peak_mindstate": peakMindState,
+		}
+		epBytes, _ := json.MarshalIndent(episodeData, "", "  ")
+		epPath := utils.ResolvePath(filepath.Join("Context", "episodes", episodeID+".json"))
+		os.MkdirAll(filepath.Dir(epPath), 0755)
+		if err := os.WriteFile(epPath, epBytes, 0644); err != nil {
+			fmt.Printf("warning: failed to save episode json to disk: %v\n", err)
 		}
 
 		// Collect the summary for the runtime memory manager
