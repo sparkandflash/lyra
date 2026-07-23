@@ -55,3 +55,15 @@ When the user is absent, the crawler shifts into **novelty-seeking (wandering) m
 
 ### Clean Transitions (The Snap-to-Attention)
 The transition between these two states is instantaneous. At the start of *every* thought cycle step, the engine checks for queued user input. If she is three hops deep into a tangential "wandering" thought chain and a user message suddenly arrives, the crawler immediately aborts the wander and snaps back into Convergence mode on the very next iteration. This ensures she doesn't respond to a direct question with a disorienting, tangent-flavored daydream.
+
+## Neuromorphic Memory Graph (The "Neuron" Structure)
+To move beyond basic vector storage and closer to biological Hebbian learning, V3 will restructure the database into a formal Graph Network of **Neurons**. 
+
+Instead of flat JSON episodes, each memory is a distinct `Neuron` object containing:
+- **Fact (Payload):** The semantic text or state variable.
+- **Timestamp:** When it was created.
+- **Synaptic Links:** Pointers to other related Neurons (representing edges in the graph).
+- **Access Count:** An internal counter tracking exactly how many times the Context Crawler has traversed this specific node.
+- **Metrics/Weight:** The biological "strength" of the memory, influenced by emotional mindstates at the time of creation or retrieval.
+
+As the Context Crawler navigates this graph during the Async Thought Loop, Neurons that are frequently accessed together will mathematically strengthen their Synaptic Links, structurally altering the memory to prioritize frequently used pathways—simulating true biological memory!

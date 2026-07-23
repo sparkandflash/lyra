@@ -47,3 +47,7 @@ To dive into the technical details, configure the API keys, and build your own p
 The detailed evolutionary plan for MSRPEngine, including the upcoming memory rewrite (V3), personality emergence (V4), and dreaming functionality (V5), has been moved to its own document. 
 
 Please see the [ROADMAP.md](ROADMAP.md) for full details.
+
+## Community
+
+Join our [Discord Server](https://discord.gg/9XZCFdYyr) to discuss the project, share personas, and get help.

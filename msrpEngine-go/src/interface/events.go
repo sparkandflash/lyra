@@ -38,16 +38,12 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 			switch evt {
 			case escalator.EventConsolidate:
 				if !c.StartConsolidation() {
-					if c.DebugMode {
-						fmt.Fprintf(c.OutWriter, "[DEBUG] Consolidation skipped (already running)\n")
-					}
+					utils.LogDebug("Consolidation skipped (already running)")
 					continue
 				}
 
 				sysMsg := "[System: Memory consolidation triggered]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 
 				var activeEps []consolidation.EpisodeSummary
@@ -72,41 +68,31 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 						}
 						c.SetUnconsolidated(false)
 						c.ResetUnconsolidatedChars()
-						if c.DebugMode {
-							fmt.Fprintf(c.OutWriter, "\n[DEBUG] Background consolidation complete.\n> ")
-						}
+						utils.LogDebug("Background consolidation complete.")
 					} else if strings.Contains(err.Error(), "no new messages to consolidate") || strings.Contains(err.Error(), "no conversation history") {
 						// We are out of sync (character count is > 0 but no messages exist to store). Reset counters safely.
 						c.SetUnconsolidated(false)
 						c.ResetUnconsolidatedChars()
 					} else {
-						if c.DebugMode {
-							fmt.Fprintf(c.OutWriter, "\n[DEBUG] Background consolidation failed: %v\n> ", err)
-						}
+						utils.LogDebug("Background consolidation failed: %v", err)
 					}
 				}(activeEps)
 			case escalator.EventEnterTempSleep:
 				sysMsg := "[System: User has disconnected from the interface.]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 				c.SetUnconsolidated(true)
 				c.AddUnconsolidatedChars(len(sysMsg))
 			case escalator.EventEnterTrueSleep:
 				delay := fmt.Sprintf("%d", utils.Config.TrueSleepDelayMins)
 				sysMsg := fmt.Sprintf("[System: it has been %s mins since user last responded, starting hibernation.]", delay)
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 				c.SetUnconsolidated(true)
 				c.AddUnconsolidatedChars(len(sysMsg))
 			case escalator.EventReflect:
 				sysMsg := "[System: Reflecting on past memories]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 
 				activeEps := c.EpisodeMgr.GetActive()
@@ -123,9 +109,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 				}
 			case escalator.EventIntrospect:
 				sysMsg := "[System: Deep introspection initiated]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 
 				_ = reflector.Introspect(c.HistoryMgr, c.EpisodeMgr)
@@ -139,9 +123,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 
 				// Inject the system cue into all active memory contexts
 				sysMsg := "[System: Proactive message triggered]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
-				}
+				utils.LogDebug("%s", sysMsg)
 				c.InjectSystemMessage(sysMsg)
 
 				reply, usefulEpisodeID, err := c.Resp.RespondProactive(ctx, c.GetMindState(), c.ResponderSTM.GetNoFlags(), episodes)
@@ -198,6 +180,17 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 			if len(inputRunes) > c.MaxInputChars {
 				input = string(inputRunes[:c.MaxInputChars])
 			}
+
+			// Ignore non-commands if sent too fast
+			if !strings.HasPrefix(input, ">>") && time.Since(c.LastInputTime) < 3*time.Second {
+				if rawInput.ResponseChan != nil {
+					rawInput.ResponseChan <- "error: please wait 3 seconds between messages"
+				} else {
+					fmt.Fprintf(c.OutWriter, "\033[31msystem: error: please wait 3 seconds between messages.\033[0m\n")
+				}
+				continue
+			}
+			c.LastInputTime = time.Now()
 
 			// Handle exits immediately before triggering wake logic
 			if input == ">>exit" {
@@ -289,7 +282,7 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 						fmt.Fprintf(c.OutWriter, "\nsystem: background consolidation completed successfully. %d episode(s) added.\n> ", len(newEpisodes))
 					}
 				}(activeEps)
-				
+
 				continue
 			} else if input == ">>reflect" {
 				activeEps := c.EpisodeMgr.GetActive()
@@ -354,26 +347,34 @@ func (c *AppCore) RunLoop(engineStartTime time.Time, lastWakeTime time.Time, rl 
 					fmt.Fprintf(c.OutWriter, "[DEBUG] Model attention < 0.0 and Energy < 400. Skipping this turn.\n")
 				}
 
-				sysMsg := "[System: You felt too exhausted and uninterested to reply. You ignored the user.]"
-				if c.DebugMode {
-					fmt.Fprintf(c.OutWriter, "\033[90m%s\033[0m\n", sysMsg)
+				if !c.IsIgnoring {
+					c.IsIgnoring = true
+
+					sysMsg := "[System: You felt too exhausted and uninterested to reply. You ignored the user.]"
+					utils.LogDebug("%s", sysMsg)
+					c.InjectSystemMessage(sysMsg)
+
+					reply := "no response"
+
+					if rawInput.ResponseChan != nil {
+						rawInput.ResponseChan <- reply
+					}
+
+					fmt.Fprintf(c.OutWriter, "\033[34m> %s\033[0m\n", reply)
+					_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetCurrentMetrics())
+					c.ResponderSTM.Update("assistant", reply)
+					c.ReactorSTM.Update("assistant", reply)
+					c.SetUnconsolidated(true)
+					c.AddUnconsolidatedChars(len(reply))
+				} else {
+					if rawInput.ResponseChan != nil {
+						rawInput.ResponseChan <- "" // Silent ignore for API
+					}
 				}
-				c.InjectSystemMessage(sysMsg)
-
-				reply := "no response"
-
-				if rawInput.ResponseChan != nil {
-					rawInput.ResponseChan <- reply
-				}
-
-				fmt.Fprintf(c.OutWriter, "\033[34m> %s\033[0m\n", reply)
-				_ = c.HistoryMgr.Save(c.PersonalityName, reply, c.GetCurrentMetrics())
-				c.ResponderSTM.Update("assistant", reply)
-				c.ReactorSTM.Update("assistant", reply)
-				c.SetUnconsolidated(true)
-				c.AddUnconsolidatedChars(len(reply))
 				continue
 			}
+
+			c.IsIgnoring = false
 
 			// Throttle: Only invoke reactor if character threshold is met
 			c.UnreactedChars += len(input)

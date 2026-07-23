@@ -46,6 +46,8 @@ type AppCore struct {
 	
 	MaxInputChars   int
 	MaxOutputChars  int
+	LastInputTime   time.Time
+	IsIgnoring      bool
 }
 
 func (c *AppCore) GetMindState() string {
@@ -145,6 +147,7 @@ type readliner interface {
 
 // Run starts the interactive chat interface for Lyra.
 func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) {
+	utils.SetRunMode(serverMode, debugMode)
 	core, err := NewAppCore(newSession, reuseSession, debugMode)
 	if err != nil {
 		fmt.Println(err)
@@ -206,6 +209,7 @@ func Run(newSession bool, reuseSession string, debugMode bool, serverMode bool) 
 	go api.StartServer(apiInputChan, core.HistoryMgr, core.Sched, core.GetMindState)
 
 	core.OutWriter = outWriter
+	utils.SetOutWriter(outWriter)
 	core.InputQueue = processChan
 	core.RunLoop(engineStartTime, lastWakeTime, rl)
 }

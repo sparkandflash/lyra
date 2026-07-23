@@ -35,6 +35,10 @@ Once the async mind can think independently, it needs to form hypotheses about t
 *   **Personality Emergence (Models of Self):** Applying model-formation inward.
     *   **Fixed Core + Mutable Layer:** A concrete core identity that never changes, with a mutable trait layer that evolves.
     *   **The Soul Score:** Gating trait retention based on the intensity of Reactor mindstate spikes, ensuring her personality development compounds organically.
+*   **The Cognitive DSL (Logic & Counting):** Giving the LLM access to a tiny, deterministic, compiled programming language consisting of basic logic gates (`invert`, `nand`, `nor`). 
+    *   The LLM can write small programs (e.g., a counter, an adder) and store them in its memory graph.
+    *   It can construct deterministic logical relationships between facts (e.g., `Fact A (True) NAND Fact B -> Fact F`).
+    *   Future inferences can be solved instantly and flawlessly by executing the stored Cognitive DSL program, bypassing the LLM's unreliable probability-based reasoning entirely.
 
 ---
 

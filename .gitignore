@@ -25,4 +25,5 @@ msrpEngine-go/terminal-app
 msrpEngine-go/test_app
 msrpEngine-go/clyde_meyers
 msrpEngine-go/debug.log
+logs.txt
 !msrpEngine-go/samples/*

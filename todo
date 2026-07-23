@@ -25,9 +25,6 @@ interfaceEvent can be a usermessage/userjoin/userleaving/systemevents/responderM
 
 
 
-  --DONE (not tested)
-
-  - update front end.
   
   - next to do: Frontend V2 Status Page Refactoring
   * Replace login screen with a Status Page (showing rate limit explanations).
@@ -45,3 +42,8 @@ interfaceEvent can be a usermessage/userjoin/userleaving/systemevents/responderM
   * **Individual Quota**: Users (tracked via JWT) get a fixed daily quota. Can reconnect multiple times until exhausted. Shows: "Session time limit reached, try again later."
   * **Tab Close Detection**: HTTP Heartbeat (`/ping` every 10s) from frontend. Missing ping = automatic disconnect and triggers global cooldown.
   * **Persistence**: Maintain a `sessions.json` mapping Session IDs to metadata (start time, message count, history file). Allows users to resume history if they return with the same JWT.
+
+
+  --DONE (not tested)
+
+  log more of her internal operations in debug mode/ in server logs, every api call, every save/update to which file.

@@ -48,4 +48,6 @@ func LogMetrics(agent string, sent int, recv int) {
 		fmt.Sprintf("%d", totalRecv),
 	}
 	_ = writer.Write(record)
+	
+	LogDebug("Metrics [%s] - Sent: %d chars | Recv: %d chars | Total Sent: %d | Total Recv: %d", agent, sent, recv, totalSent, totalRecv)
 }

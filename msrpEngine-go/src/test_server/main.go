@@ -7,8 +7,38 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
+
+// Rate Limiter to simulate Gemini Free Tier (15 RPM)
+var (
+	requestTimes []time.Time
+	rlMu         sync.Mutex
+)
+
+func checkRateLimit() bool {
+	rlMu.Lock()
+	defer rlMu.Unlock()
+
+	now := time.Now()
+	// Filter out requests older than 1 minute
+	validTimes := []time.Time{}
+	for _, t := range requestTimes {
+		if now.Sub(t) < time.Minute {
+			validTimes = append(validTimes, t)
+		}
+	}
+	requestTimes = validTimes
+
+	// Check against 15 RPM limit
+	if len(requestTimes) >= 15 {
+		return false
+	}
+	
+	requestTimes = append(requestTimes, now)
+	return true
+}
 
 // OpenAI compatible structs
 type openAIMessage struct {
@@ -44,6 +74,11 @@ func randomFloat() float64 {
 }
 
 func handleCompletions(w http.ResponseWriter, r *http.Request) {
+	if !checkRateLimit() {
+		http.Error(w, "Too Many Requests (Simulated 429)", http.StatusTooManyRequests)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -105,6 +140,11 @@ func handleCompletions(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleEmbeddings(w http.ResponseWriter, r *http.Request) {
+	if !checkRateLimit() {
+		http.Error(w, "Too Many Requests (Simulated 429)", http.StatusTooManyRequests)
+		return
+	}
+
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
@@ -136,7 +176,9 @@ func main() {
 	mux.HandleFunc("/chat/completions", handleCompletions)
 	mux.HandleFunc("/v1/chat/completions", handleCompletions)
 	mux.HandleFunc("/v1/embeddings", handleEmbeddings)
+	mux.HandleFunc("/embeddings", handleEmbeddings)
 	mux.HandleFunc("/v1/models", handleModels)
+	mux.HandleFunc("/models", handleModels)
 
 	port := "8081"
 	fmt.Printf("\033[36m[Mock LLM Server running on port %s]\033[0m\n", port)

@@ -3,8 +3,10 @@ package agents
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"msrpengine/src/providers/inference"
+	"msrpengine/src/utils"
 )
 
 // Agent represents a unified LLM client capable of communicating with various providers.
@@ -33,8 +35,20 @@ func (a *Agent) Generate(ctx context.Context, userPrompt string, sysPromptOverri
 	if a.client == nil {
 		return "", fmt.Errorf("no inference provider configured for agent type: %s", a.Type)
 	}
-
-	return a.client.Generate(ctx, userPrompt, activeSysPrompt)
+	
+	start := time.Now()
+	utils.LogDebug("Agent [%s] initiating Generation via %s...", a.Type, a.Type)
+	
+	resp, err := a.client.Generate(ctx, userPrompt, activeSysPrompt)
+	
+	elapsed := time.Since(start)
+	if err != nil {
+		utils.LogDebug("Agent [%s] Generation failed after %s: %v", a.Type, elapsed, err)
+	} else {
+		utils.LogDebug("Agent [%s] Generation succeeded in %s (Response Length: %d chars)", a.Type, elapsed, len(resp))
+	}
+	
+	return resp, err
 }
 
 // Validate pings the provider's models endpoint to verify credentials.
